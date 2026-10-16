@@ -1,0 +1,27 @@
+{
+  "version": "review-kit-render-profile/v1",
+  "id": "review-kit-default",
+  "input_contract": "review-kit-render-input/v2",
+  "artifacts": {
+    "finding": {
+      "schema": "finding.schema.json",
+      "template": "finding.j2"
+    },
+    "summary": {
+      "schema": "summary.schema.json",
+      "template": "summary.j2"
+    },
+    "transition": {
+      "schema": "transition.schema.json",
+      "template": "transition.j2"
+    },
+    "answer": {
+      "schema": "answer.schema.json",
+      "template": "answer.j2"
+    },
+    "suggestion": {
+      "schema": "suggestion.schema.json",
+      "template": "suggestion.j2"
+    }
+  }
+}

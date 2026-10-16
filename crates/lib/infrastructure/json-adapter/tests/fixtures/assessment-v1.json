@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "kind": "assessment",
+  "context": "context.json",
+  "subject": {
+    "provider": "gitlab",
+    "host": "https://gitlab.example.test",
+    "repository": "team/project",
+    "request": 1
+  },
+  "reviewer": "9",
+  "revision": {
+    "head": "1111111111111111111111111111111111111111",
+    "comparison": [
+      "2222222222222222222222222222222222222222",
+      "3333333333333333333333333333333333333333"
+    ]
+  },
+  "policy_set": "rust-codebase-policies",
+  "requested_policies": [],
+  "policies": [
+    {
+      "policy_id": "baseline-integrity-policy",
+      "judgment": null
+    },
+    {
+      "policy_id": "baseline-proof-policy",
+      "judgment": null
+    }
+  ],
+  "findings": [],
+  "new_findings": [],
+  "decision": null,
+  "depth": null,
+  "scope": null,
+  "limitation": null,
+  "answers": [],
+  "transitions": [],
+  "local_context": ""
+}

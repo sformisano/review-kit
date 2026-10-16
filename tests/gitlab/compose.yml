@@ -1,0 +1,24 @@
+services:
+  gitlab:
+    image: gitlab/gitlab-ce:19.3.3-ce.0@sha256:8c6ede6b1334738123feba0d248e81a14fc3db7065dc6e1f0a753c0d0332fee8
+    hostname: review-kit-gitlab.local
+    shm_size: 256m
+    mem_limit: 16g
+    cpus: 8
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://127.0.0.1:8929'
+        puma['worker_processes'] = 2
+        gitlab_rails['smtp_enable'] = false
+        gitlab_rails['usage_ping_enabled'] = false
+        letsencrypt['enable'] = false
+    ports:
+      - '127.0.0.1:8929:8929'
+    volumes:
+      - config:/etc/gitlab
+      - data:/var/opt/gitlab
+      - logs:/var/log/gitlab
+volumes:
+  config:
+  data:
+  logs:

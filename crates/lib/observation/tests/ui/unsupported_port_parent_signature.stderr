@@ -1,0 +1,5 @@
+error: observed_port moves facade declarations into a child module; use imported or crate:: paths instead of super::
+ --> tests/ui/unsupported_port_parent_signature.rs:7:27
+  |
+7 |         fn read(&self) -> super::Value;
+  |                           ^^^^^

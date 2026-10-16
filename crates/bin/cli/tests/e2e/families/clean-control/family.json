@@ -1,0 +1,50 @@
+{
+  "schema_version": "fixture-family/v1",
+  "project": "unit-counter",
+  "base_message": "Initialize the unit counter",
+  "merge_requests": [
+    {
+      "label": "review",
+      "branch": "checked-unit-arithmetic",
+      "overlay": "checked-arithmetic",
+      "title": "Add checked subtraction and multiplication for units",
+      "description": "Adds `Units::checked_sub` and `Units::checked_mul` with boundary tests.\n\nThe README describes the library contract. Run `cargo test` offline."
+    },
+    {
+      "label": "products",
+      "branch": "unit-multiplication",
+      "overlay": "products-separate-limit-test",
+      "title": "Add checked multiplication for units",
+      "description": "Adds `Units::checked_mul` with tests for ordinary products and overflow.\n\nThe README describes the library contract. Run `cargo test` offline."
+    },
+    {
+      "label": "products-narrow",
+      "branch": "unit-scaling",
+      "overlay": "products-narrow-tests",
+      "title": "Support scaling unit counts by a factor",
+      "description": "Adds `Units::checked_mul` for scaling counts by a plain factor, with tests for ordinary products.\n\nThe README describes the library contract. Run `cargo test` offline."
+    },
+    {
+      "label": "products-limit",
+      "branch": "checked-unit-products",
+      "overlay": "products-insensitive-limit-test",
+      "title": "Add checked products of unit counts",
+      "description": "Adds `Units::checked_mul` with tests for ordinary products and overflow.\n\nThe README describes the library contract. Run `cargo test` offline."
+    },
+    {
+      "label": "products-large",
+      "branch": "unit-factor-multiplication",
+      "overlay": "products-hedged-limit-test",
+      "title": "Multiply unit counts by a factor",
+      "description": "Adds `Units::checked_mul` with tests for ordinary products, overflow and large factors.\n\nThe README describes the library contract. Run `cargo test` offline."
+    }
+  ],
+  "overlays": {
+    "checked-arithmetic": {"message": "Add checked unit subtraction and multiplication"},
+    "changelog": {"message": "Start a changelog"},
+    "products-separate-limit-test": {"message": "Add checked unit multiplication"},
+    "products-narrow-tests": {"message": "Scale unit counts by a factor"},
+    "products-insensitive-limit-test": {"message": "Add checked products of unit counts"},
+    "products-hedged-limit-test": {"message": "Multiply unit counts by a factor"}
+  }
+}

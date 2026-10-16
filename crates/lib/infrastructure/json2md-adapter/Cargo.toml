@@ -1,0 +1,27 @@
+[package]
+name = "review-kit-json2md-adapter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+displaydoc.workspace = true
+thiserror.workspace = true
+review-kit-domain = { path = "../../domain" }
+review-kit-application = { path = "../../application" }
+review-kit-observation = { path = "../../observation" }
+json2md = "0.1.0"
+serde_json = "1"
+serde.workspace = true
+sha2 = "0.10"
+url = "2.5"
+
+[dev-dependencies]
+pulldown-cmark = { version = "0.13.4", default-features = false }
+tempfile.workspace = true
+
+[lints]
+workspace = true

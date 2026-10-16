@@ -1,0 +1,10 @@
+profile:
+  id: document-service-review
+  display_name: Document Service review
+catalogs:
+  ai-skills:
+    source: http://127.0.0.1:18731/ai-skills.git
+entries:
+- catalog_id: ai-skills
+  kind: stack
+  slug: codebase-review-workflows

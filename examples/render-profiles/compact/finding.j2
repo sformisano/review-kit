@@ -1,0 +1,14 @@
+### {{ title_markdown }} [{{ severity }} / F{{ id }}]
+
+Policy: {{ policy.name_markdown }}
+{% if disposition == "Advisory" %}
+This finding does not block the MR.
+{% endif %}
+{{ body }}
+
+**Evidence:**
+
+{{ evidence }}
+{% if suggestion is not none %}
+{{ suggestion.markdown }}
+{% endif %}

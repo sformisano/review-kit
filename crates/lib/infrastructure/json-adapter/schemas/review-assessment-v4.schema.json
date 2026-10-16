@@ -1,0 +1,557 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Review Kit unified assessment v4",
+  "$ref": "#/$defs/assessment",
+  "$defs": {
+    "revision": {
+      "type": "object",
+      "properties": {
+        "head": {
+          "type": "string"
+        },
+        "comparison": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "head",
+        "comparison"
+      ],
+      "additionalProperties": false
+    },
+    "location": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "path",
+        "line"
+      ],
+      "additionalProperties": false
+    },
+    "suggestion": {
+      "type": "object",
+      "properties": {
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "original": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "replacement": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "location",
+        "revision",
+        "start_line",
+        "original",
+        "replacement",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "finding": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "policy_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "p1",
+            "p2",
+            "p3",
+            "p4",
+            "p5"
+          ]
+        },
+        "disposition": {
+          "enum": [
+            "blocking",
+            "advisory"
+          ]
+        },
+        "status": {
+          "enum": [
+            "open",
+            "fixed",
+            "withdrawn",
+            "uncertain"
+          ]
+        },
+        "evidence": {
+          "type": "string"
+        },
+        "validated": {
+          "type": "boolean"
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "suggestion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/suggestion"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "policy_id",
+        "title",
+        "body",
+        "severity",
+        "disposition",
+        "status",
+        "evidence",
+        "validated",
+        "location"
+      ],
+      "additionalProperties": false
+    },
+    "answer": {
+      "type": "object",
+      "properties": {
+        "finding": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "in_reply_to": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "finding",
+        "in_reply_to",
+        "body"
+      ],
+      "additionalProperties": false
+    },
+    "transition": {
+      "type": "object",
+      "properties": {
+        "finding": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "from": {
+          "enum": [
+            "open",
+            "fixed",
+            "withdrawn",
+            "uncertain"
+          ]
+        },
+        "to": {
+          "enum": [
+            "open",
+            "fixed",
+            "withdrawn",
+            "uncertain"
+          ]
+        },
+        "body": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "finding",
+        "from",
+        "to",
+        "body"
+      ],
+      "additionalProperties": false
+    },
+    "assessment": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 4
+        },
+        "kind": {
+          "const": "assessment"
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "policy_set": {
+          "type": "string"
+        },
+        "policies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/review_policy"
+          }
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/carried_reassessment"
+          }
+        },
+        "new_findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/finding"
+          }
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "enum": [
+                "ready",
+                "changes_required",
+                "blocked"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "depth": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limitation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "answers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/answer"
+          }
+        },
+        "transitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/transition"
+          }
+        },
+        "confirmations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/confirmation"
+          }
+        },
+        "local_context": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "run_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "supersedes": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      },
+      "required": [
+        "version",
+        "kind",
+        "revision",
+        "policy_set",
+        "policies",
+        "findings",
+        "new_findings",
+        "decision",
+        "depth",
+        "scope",
+        "limitation",
+        "answers",
+        "transitions",
+        "confirmations",
+        "local_context",
+        "run_id",
+        "supersedes",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "outcome": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "excluded"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "unresolved"
+            },
+            "limitation": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "limitation"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "satisfied"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "violated"
+            },
+            "evidence": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "evidence"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "blocked"
+            },
+            "limitation": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "limitation"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "review_policy": {
+      "type": "object",
+      "properties": {
+        "policy_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/outcome"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "policy_id",
+        "name",
+        "required",
+        "reason",
+        "outcome"
+      ],
+      "additionalProperties": false
+    },
+    "carried_reassessment": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "reusable_confirmation": {
+          "type": "boolean"
+        },
+        "reassessment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/finding"
+            },
+            {
+              "const": "unchanged"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "reusable_confirmation",
+        "reassessment"
+      ],
+      "additionalProperties": false
+    },
+    "confirmation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "source": {
+              "const": "checker"
+            },
+            "finding": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "result": {
+              "enum": [
+                "confirmed",
+                "rejected",
+                "evidence_gap"
+              ]
+            },
+            "checked": {
+              "$ref": "#/$defs/finding"
+            },
+            "basis": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "source",
+            "finding",
+            "result",
+            "checked",
+            "basis"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "source": {
+              "const": "retained"
+            },
+            "finding": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "basis": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "source",
+            "finding",
+            "basis"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

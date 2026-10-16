@@ -1,0 +1,5 @@
+error: observed operations do not support track_caller; the generated body is a closure
+ --> tests/ui/unsupported_track_caller.rs:3:5
+  |
+3 |     #[track_caller]
+  |     ^

@@ -1,0 +1,11 @@
+error[E0505]: cannot move out of `host` because it is borrowed
+  --> tests/ui/session_outlives_host.rs:32:10
+   |
+30 |     let mut host = Host::new(&mut provider);
+   |         -------- binding `host` declared here
+31 |     let session = host.acquire();
+   |                   ---- borrow of `host` occurs here
+32 |     drop(host);
+   |          ^^^^ move out of `host` occurs here
+33 |     println!("{}", session.value());
+   |                    ------- borrow later used here

@@ -1,0 +1,5 @@
+error: unexpected end of input, operation requires output = <completion policy>
+ --> tests/ui/missing_output.rs:3:92
+  |
+3 |     #[operation(name = "test.missing_output", input = review_kit_observation::Fields::new())]
+  |                                                                                            ^

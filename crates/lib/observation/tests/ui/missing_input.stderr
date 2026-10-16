@@ -1,0 +1,5 @@
+error: unexpected end of input, operation requires input = <Fields expression>
+ --> tests/ui/missing_input.rs:3:141
+  |
+3 | ...tion::Completion::success(review_kit_observation::Fields::new()))]
+  |                                                                    ^

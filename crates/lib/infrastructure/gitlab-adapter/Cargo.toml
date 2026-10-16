@@ -1,0 +1,31 @@
+[package]
+name = "review-kit-gitlab-adapter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+derive_more.workspace = true
+displaydoc.workspace = true
+thiserror.workspace = true
+review-kit-domain = { path = "../../domain" }
+review-kit-application = { path = "../../application" }
+review-kit-observation = { path = "../../observation" }
+review-kit-json-adapter = { path = "../json-adapter" }
+reqwest.workspace = true
+url = "2.5"
+percent-encoding = "2.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha1 = "0.10"
+pulldown-cmark = { version = "0.13.4", default-features = false }
+
+[dev-dependencies]
+httpmock.workspace = true
+testcontainers.workspace = true
+
+[lints]
+workspace = true

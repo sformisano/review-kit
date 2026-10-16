@@ -1,0 +1,5 @@
+error[E0616]: field `inner` of struct `Managed` is private
+  --> tests/ui/private_port_field.rs:15:21
+   |
+15 |     let _ = managed.inner;
+   |                     ^^^^^ private field

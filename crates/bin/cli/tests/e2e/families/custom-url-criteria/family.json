@@ -1,0 +1,18 @@
+{
+  "schema_version": "fixture-family/v1",
+  "project": "payout-ledger",
+  "base_message": "Initialize the payout ledger",
+  "merge_requests": [
+    {
+      "label": "review",
+      "branch": "fees-and-refunds",
+      "overlay": "fees-and-refunds",
+      "title": "Add percentage fees and refunds",
+      "description": "Adds `percentage_fee` and `Ledger::refund` for partner payouts.\n\nRun `cargo test` offline."
+    }
+  ],
+  "overlays": {
+    "fees-and-refunds": {"message": "Add percentage fees and refunds"},
+    "basis-point-fees": {"message": "Compute fees in basis points and record refunds"}
+  }
+}

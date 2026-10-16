@@ -1,0 +1,18 @@
+{
+  "version": 3,
+  "kind": "progress",
+  "subject": {
+    "provider": "gitlab",
+    "host": "https://gitlab.example.test",
+    "repository": "team/project",
+    "request": 1
+  },
+  "reviewer": "9",
+  "unresolved": null,
+  "authorization": null,
+  "retried_creations": [],
+  "verified_resolutions": [],
+  "coverage_binding": null,
+  "settled_runs": [],
+  "dispatch_may_have_started": false
+}

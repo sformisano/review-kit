@@ -1,0 +1,70 @@
+## Review {{ round.number }}: {{ round.decision }}
+
+Publication: **{{ round.status }}**
+
+| ID | Finding | Severity | Disposition | Status | Actions in this round |
+| --- | --- | --- | --- | --- | --- |
+{% for finding in findings %}| F{{ finding.id }} | {% if finding.url is not none %}[{{ finding.title_markdown }}](<{{ finding.url }}>){% else %}{{ finding.title_markdown }}{% endif %} | {{ finding.severity }} | {{ finding.disposition }} | {{ finding.status }} | {% for action in finding.actions %}{{ action.label }}{% if not loop.last %}, {% endif %}{% else %}—{% endfor %} |
+{% endfor %}
+
+Total {{ counts.total }} · Open {{ counts.open }} · Fixed {{ counts.fixed }} · Withdrawn {{ counts.withdrawn }} · Uncertain {{ counts.uncertain }}
+{% if unpublished %}
+Unpublished findings: {% for id in unpublished %}F{{ id }}{% if not loop.last %}, {% endif %}{% endfor %}
+{% endif %}
+<details>
+<summary>Review context</summary>
+
+| Field | Value |
+| --- | --- |
+| Latest attempted round | R{{ round.number }} |
+| Review workflow | {{ round.review_workflow_markdown if round.review_workflow_markdown is not none else "Unavailable" }} |
+| Selected policy set | {{ round.policy_set_markdown if round.policy_set_markdown is not none else "Unavailable" }} |
+| Review scope | {{ round.scope_markdown }} |
+| Review depth | {{ round.depth_markdown }} |
+| {{ round.revision_kind }} revision range | {% for ref in round.revision.comparison_markdown %}{{ ref }} / {% endfor %}{{ round.revision.head_markdown }} |
+{% if round.limitation_markdown is not none %}
+Review limitation: {{ round.limitation_markdown }}
+{% endif %}{% if round.publication_limitation is not none %}
+Publication limitation: {{ round.publication_limitation }}
+{% endif %}{% if round.abandonment_markdown is not none %}
+Abandonment: {{ round.abandonment_markdown }}
+{% endif %}
+</details>
+{% for old in history %}
+<details>
+<summary>Earlier review {{ old.number }}: {{ old.decision }} ({{ old.status }})</summary>
+
+| Field | Value |
+| --- | --- |
+| Round | R{{ old.number }} |
+| Review decision | {{ old.decision }} |
+| Publication status | {{ old.status }} |
+| {{ old.revision_kind }} revision range | {% for ref in old.revision.comparison_markdown %}{{ ref }} / {% endfor %}{{ old.revision.head_markdown }} |
+| Review scope | {{ old.scope_markdown }} |
+| Review depth | {{ old.depth_markdown }} |
+{% if old.history_available %}
+| ID | Finding | Severity | Disposition | Status | Actions in this round |
+| --- | --- | --- | --- | --- | --- |
+{% for finding in old.findings %}| F{{ finding.id }} | {% if finding.url is not none %}[{{ finding.title_markdown }}](<{{ finding.url }}>){% else %}{{ finding.title_markdown }}{% endif %} | {{ finding.severity }} | {{ finding.disposition }} | {{ finding.status }} | {% for action in finding.actions %}{{ action.label }}{% if not loop.last %}, {% endif %}{% else %}—{% endfor %} |
+{% endfor %}
+{% else %}
+Historical findings unavailable: this round has no retained verified finding snapshot.
+{% endif %}{% if old.limitation_markdown is not none %}
+Review limitation: {{ old.limitation_markdown }}
+{% endif %}{% if old.publication_limitation is not none %}
+Publication limitation: {{ old.publication_limitation }}
+{% endif %}{% if old.abandonment_markdown is not none %}
+Abandonment: {{ old.abandonment_markdown }}
+{% endif %}
+</details>
+{% endfor %}
+<details>
+<summary>Policy record</summary>
+
+| Policy | Applicable rounds | Comments across MR |
+| --- | --- | --- |
+{% for policy in policies %}| {% if policy.name_markdown is not none %}{{ policy.name_markdown }}{% else %}Display name unavailable ({{ policy.id_markdown }}){% endif %} | {% for number in policy.rounds %}R{{ number }}{% if not loop.last %}, {% endif %}{% else %}—{% endfor %} | {{ policy.comments }} |
+{% endfor %}
+Counts include distinct verified owned finding roots. Zero comments do not imply evaluation.
+
+</details>

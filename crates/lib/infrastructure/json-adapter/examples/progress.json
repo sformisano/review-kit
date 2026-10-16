@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "kind": "progress",
+  "subject": {
+    "provider": "gitlab",
+    "host": "https://gitlab.example.test",
+    "repository": "team/project",
+    "request": 1
+  },
+  "reviewer": "9",
+  "unresolved": null
+}

@@ -1,0 +1,1949 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Review Kit run-bound publication progress v3",
+  "$ref": "#/$defs/progress",
+  "$defs": {
+    "subject": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "repository": {
+          "type": "string"
+        },
+        "request": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "provider",
+        "host",
+        "repository",
+        "request"
+      ],
+      "additionalProperties": false
+    },
+    "revision": {
+      "type": "object",
+      "properties": {
+        "head": {
+          "type": "string"
+        },
+        "comparison": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "head",
+        "comparison"
+      ],
+      "additionalProperties": false
+    },
+    "location": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "path",
+        "line"
+      ],
+      "additionalProperties": false
+    },
+    "suggestion": {
+      "type": "object",
+      "properties": {
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "original": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "replacement": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "location",
+        "revision",
+        "start_line",
+        "original",
+        "replacement",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "finding": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "policy_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "p1",
+            "p2",
+            "p3",
+            "p4",
+            "p5"
+          ]
+        },
+        "disposition": {
+          "enum": [
+            "blocking",
+            "advisory"
+          ]
+        },
+        "status": {
+          "enum": [
+            "open",
+            "fixed",
+            "withdrawn",
+            "uncertain"
+          ]
+        },
+        "evidence": {
+          "type": "string"
+        },
+        "validated": {
+          "type": "boolean"
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "suggestion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/suggestion"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "policy_id",
+        "title",
+        "body",
+        "severity",
+        "disposition",
+        "status",
+        "evidence",
+        "validated",
+        "location"
+      ],
+      "additionalProperties": false
+    },
+    "judgment": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "satisfied"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "violated"
+            },
+            "evidence": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "evidence"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "blocked"
+            },
+            "limitation": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "limitation"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "evaluation": {
+      "type": "object",
+      "properties": {
+        "policy_id": {
+          "type": "string"
+        },
+        "judgment": {
+          "$ref": "#/$defs/judgment"
+        }
+      },
+      "required": [
+        "policy_id",
+        "judgment"
+      ],
+      "additionalProperties": false
+    },
+    "assessment_state": {
+      "type": "object",
+      "properties": {
+        "subject": {
+          "$ref": "#/$defs/subject"
+        },
+        "reviewer": {
+          "type": "string"
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "decision": {
+          "enum": [
+            "ready",
+            "changes_required",
+            "blocked"
+          ]
+        },
+        "depth": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "limitation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "selected_policies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evaluations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evaluation"
+          }
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/finding"
+          }
+        }
+      },
+      "required": [
+        "subject",
+        "reviewer",
+        "revision",
+        "decision",
+        "depth",
+        "scope",
+        "selected_policies",
+        "evaluations",
+        "findings"
+      ],
+      "additionalProperties": false
+    },
+    "reply_kind": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "transition"
+            },
+            "status": {
+              "enum": [
+                "open",
+                "fixed",
+                "withdrawn",
+                "uncertain"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "status"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "answer"
+            },
+            "note": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "note"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "action_id": {
+      "type": "object",
+      "properties": {
+        "round": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "finding": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "kind": {
+          "$ref": "#/$defs/reply_kind"
+        }
+      },
+      "required": [
+        "round",
+        "finding",
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "reply": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "thread": {
+          "type": "string"
+        },
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/action_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "body": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "author",
+        "thread",
+        "body"
+      ],
+      "additionalProperties": false
+    },
+    "answer": {
+      "type": "object",
+      "properties": {
+        "finding": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "in_reply_to": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "finding",
+        "in_reply_to",
+        "body"
+      ],
+      "additionalProperties": false
+    },
+    "transition": {
+      "type": "object",
+      "properties": {
+        "finding": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "from": {
+          "enum": [
+            "open",
+            "fixed",
+            "withdrawn",
+            "uncertain"
+          ]
+        },
+        "to": {
+          "enum": [
+            "open",
+            "fixed",
+            "withdrawn",
+            "uncertain"
+          ]
+        },
+        "body": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "finding",
+        "from",
+        "to",
+        "body"
+      ],
+      "additionalProperties": false
+    },
+    "planned_action": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "finding"
+            },
+            "finding": {
+              "$ref": "#/$defs/finding"
+            },
+            "body": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "finding",
+            "body"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "reply"
+            },
+            "finding": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "reply": {
+              "$ref": "#/$defs/reply_kind"
+            },
+            "body": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "finding",
+            "reply",
+            "body"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "set_resolved"
+            },
+            "finding": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "resolved": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "finding",
+            "resolved"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "effect": {
+      "enum": [
+        "create_summary",
+        "update_summary",
+        "finding",
+        "reply",
+        "resolve",
+        "reopen"
+      ]
+    },
+    "limitation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "authority"
+            },
+            "effect": {
+              "$ref": "#/$defs/effect"
+            }
+          },
+          "required": [
+            "kind",
+            "effect"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "revision_changed"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "concurrent_change"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "provider_unavailable"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "rejected"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "uncertain"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "invalid_rendering"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "evidence_unavailable"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "preparation_failed"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "abandonment": {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string"
+        },
+        "verified_actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/planned_action"
+          }
+        }
+      },
+      "required": [
+        "reason",
+        "verified_actions"
+      ],
+      "additionalProperties": false
+    },
+    "round": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "assessment": {
+          "$ref": "#/$defs/assessment_state"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "partial",
+            "completed",
+            "blocked",
+            "superseded",
+            "abandoned"
+          ]
+        },
+        "abandonment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/abandonment"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "publication_limitation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/limitation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "answers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/answer"
+          }
+        },
+        "transitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/transition"
+          }
+        },
+        "answer_targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/reply"
+          }
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/planned_action"
+          }
+        },
+        "review_workflow": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "policy_set": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "policy_names": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "renderer": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "input_contract": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "fingerprint": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "id",
+                "input_contract",
+                "fingerprint"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "communicated_findings": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "finding": {
+                    "$ref": "#/$defs/finding"
+                  },
+                  "root_note": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "thread": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "actions": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/published_action"
+                    }
+                  }
+                },
+                "required": [
+                  "finding",
+                  "root_note",
+                  "thread",
+                  "actions"
+                ],
+                "additionalProperties": false
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "verified_resolutions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/resolution_receipt"
+          }
+        },
+        "confirmed_validation": {
+          "const": true
+        },
+        "policy_declarations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "policy",
+              "status",
+              "reason"
+            ],
+            "properties": {
+              "policy": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "id",
+                  "name"
+                ],
+                "additionalProperties": false
+              },
+              "status": {
+                "enum": [
+                  "applicable",
+                  "excluded",
+                  "unresolved"
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      },
+      "required": [
+        "number",
+        "assessment",
+        "status",
+        "answers",
+        "transitions",
+        "answer_targets",
+        "actions",
+        "policy_declarations"
+      ],
+      "additionalProperties": false
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "current": {
+          "$ref": "#/$defs/round"
+        },
+        "history": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/round"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "author",
+        "body",
+        "current",
+        "history"
+      ],
+      "additionalProperties": false
+    },
+    "finding_record": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "root_note": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "created_in": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "finding": {
+          "$ref": "#/$defs/finding"
+        },
+        "body": {
+          "type": "string"
+        },
+        "resolved": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "root_note",
+        "author",
+        "created_in",
+        "revision",
+        "finding",
+        "body",
+        "resolved"
+      ],
+      "additionalProperties": false
+    },
+    "snapshot": {
+      "type": "object",
+      "properties": {
+        "subject": {
+          "$ref": "#/$defs/subject"
+        },
+        "reviewer": {
+          "type": "string"
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "summaries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/summary"
+          }
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/finding_record"
+          }
+        },
+        "replies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/reply"
+          }
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/effect"
+          }
+        }
+      },
+      "required": [
+        "subject",
+        "reviewer",
+        "revision",
+        "summaries",
+        "findings",
+        "replies",
+        "permissions"
+      ],
+      "additionalProperties": false
+    },
+    "changed_file": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "added"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "path"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "modified"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "path"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "deleted"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "path"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "renamed"
+            },
+            "previous": {
+              "type": "string"
+            },
+            "current": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "previous",
+            "current"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "changes": {
+      "type": "object",
+      "properties": {
+        "subject": {
+          "$ref": "#/$defs/subject"
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/changed_file"
+          }
+        },
+        "unified_diff": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "subject",
+        "revision",
+        "files",
+        "unified_diff"
+      ],
+      "additionalProperties": false
+    },
+    "context": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "context"
+        },
+        "version": {
+          "const": 1
+        },
+        "snapshot": {
+          "$ref": "#/$defs/snapshot"
+        },
+        "changes": {
+          "$ref": "#/$defs/changes"
+        }
+      },
+      "required": [
+        "kind",
+        "version",
+        "snapshot",
+        "changes"
+      ],
+      "additionalProperties": false
+    },
+    "policy_slot": {
+      "type": "object",
+      "properties": {
+        "policy_id": {
+          "type": "string"
+        },
+        "judgment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/judgment"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      },
+      "required": [
+        "policy_id"
+      ],
+      "additionalProperties": false
+    },
+    "finding_slot": {
+      "type": "object",
+      "properties": {
+        "previous": {
+          "$ref": "#/$defs/finding"
+        },
+        "reassessment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/finding"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "previous"
+      ],
+      "additionalProperties": false
+    },
+    "assessment": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "assessment"
+        },
+        "context": {
+          "type": "string"
+        },
+        "subject": {
+          "$ref": "#/$defs/subject"
+        },
+        "reviewer": {
+          "type": "string"
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "policy_set": {
+          "type": "string"
+        },
+        "policies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/policy_slot"
+          }
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/finding_slot"
+          }
+        },
+        "new_findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/finding"
+          }
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "enum": [
+                "ready",
+                "changes_required",
+                "blocked"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "depth": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limitation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "answers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/answer"
+          }
+        },
+        "transitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/transition"
+          }
+        },
+        "local_context": {
+          "type": "string"
+        },
+        "requested_policies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "deprecated": true,
+          "description": "Accepted from retained assessments and ignored. New assessments omit this field."
+        }
+      },
+      "required": [
+        "version",
+        "kind",
+        "context",
+        "subject",
+        "reviewer",
+        "revision",
+        "policy_set",
+        "policies",
+        "findings",
+        "new_findings",
+        "answers",
+        "transitions",
+        "local_context"
+      ],
+      "additionalProperties": false
+    },
+    "write": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "summary"
+            },
+            "expected": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/summary"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "round": {
+              "$ref": "#/$defs/round"
+            },
+            "history": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/round"
+              }
+            },
+            "body": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "expected",
+            "round",
+            "history",
+            "body"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "finding"
+            },
+            "round": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "revision": {
+              "$ref": "#/$defs/revision"
+            },
+            "finding": {
+              "$ref": "#/$defs/finding"
+            },
+            "body": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "round",
+            "revision",
+            "finding",
+            "body"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "reply"
+            },
+            "thread": {
+              "type": "string"
+            },
+            "action": {
+              "$ref": "#/$defs/action_id"
+            },
+            "body": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "thread",
+            "action",
+            "body"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "set_resolved"
+            },
+            "thread": {
+              "type": "string"
+            },
+            "resolved": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "thread",
+            "resolved"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "unresolved": {
+      "type": "object",
+      "properties": {
+        "subject": {
+          "$ref": "#/$defs/subject"
+        },
+        "reviewer": {
+          "type": "string"
+        },
+        "write": {
+          "$ref": "#/$defs/write"
+        },
+        "renderer": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "input_contract": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "fingerprint": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "id",
+                "input_contract",
+                "fingerprint"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "phase": {
+          "enum": [
+            "prepared",
+            "dispatch_possible",
+            "legacy_ambiguous"
+          ]
+        },
+        "baseline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/snapshot"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "subject",
+        "reviewer",
+        "write"
+      ],
+      "additionalProperties": false
+    },
+    "progress": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 3
+        },
+        "kind": {
+          "const": "progress"
+        },
+        "subject": {
+          "$ref": "#/$defs/subject"
+        },
+        "reviewer": {
+          "type": "string"
+        },
+        "unresolved": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/unresolved"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "verified_resolutions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/resolution_receipt"
+          }
+        },
+        "authorization": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/round_authorization"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retried_creations": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/write"
+          }
+        },
+        "coverage_binding": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "run_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "round": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "review_assessment": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "snapshot_files": {
+                  "type": "object",
+                  "properties": {
+                    "review-context.json": {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    },
+                    "reviewed-source.json": {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    },
+                    "merge-request.diff": {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    },
+                    "review-conversation.json": {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    }
+                  },
+                  "required": [
+                    "review-context.json",
+                    "reviewed-source.json",
+                    "merge-request.diff",
+                    "review-conversation.json"
+                  ],
+                  "additionalProperties": false
+                },
+                "prior_authorization": {
+                  "description": "The round grant that existed immediately before the binding was installed. Releasing a binding that never reached the provider restores it.",
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/round_authorization"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "run_id",
+                "round",
+                "review_assessment",
+                "snapshot_files"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "settled_runs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "run_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "review_assessment": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "round": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "outcome": {
+                "enum": [
+                  "published",
+                  "no_changes",
+                  "abandoned"
+                ]
+              },
+              "reason": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "verified_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "snapshot_files": {
+                "type": "object",
+                "properties": {
+                  "review-context.json": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "reviewed-source.json": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "merge-request.diff": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "review-conversation.json": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  }
+                },
+                "required": [
+                  "review-context.json",
+                  "reviewed-source.json",
+                  "merge-request.diff",
+                  "review-conversation.json"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "run_id",
+              "review_assessment",
+              "round",
+              "outcome",
+              "reason",
+              "verified_at",
+              "snapshot_files"
+            ],
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "outcome": {
+                      "const": "abandoned"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "reason": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "dispatch_may_have_started": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "version",
+        "kind",
+        "subject",
+        "reviewer",
+        "coverage_binding",
+        "settled_runs",
+        "dispatch_may_have_started"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "coverage_binding": {
+                "type": "null"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "unresolved": {
+                "type": "null"
+              },
+              "settled_runs": {
+                "type": "array",
+                "maxItems": 0
+              },
+              "dispatch_may_have_started": {
+                "const": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "published_action": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "created"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "resolved"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "reopened"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "transition"
+            },
+            "from": {
+              "$ref": "#/$defs/status"
+            },
+            "to": {
+              "$ref": "#/$defs/status"
+            }
+          },
+          "required": [
+            "kind",
+            "from",
+            "to"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "answered"
+            },
+            "in_reply_to": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "kind",
+            "in_reply_to"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "observed_resolved"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "observed_reopened"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "status": {
+      "enum": [
+        "open",
+        "fixed",
+        "withdrawn",
+        "uncertain"
+      ]
+    },
+    "resolution_receipt": {
+      "type": "object",
+      "properties": {
+        "subject": {
+          "$ref": "#/$defs/subject"
+        },
+        "reviewer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "round": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "thread": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resolved": {
+          "type": "boolean"
+        },
+        "provenance": {
+          "enum": [
+            "acknowledged",
+            "observed"
+          ]
+        }
+      },
+      "required": [
+        "subject",
+        "reviewer",
+        "round",
+        "thread",
+        "resolved"
+      ],
+      "additionalProperties": false
+    },
+    "round_authorization": {
+      "type": "object",
+      "properties": {
+        "round": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "effects": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/effect"
+          }
+        }
+      },
+      "required": [
+        "round",
+        "effects"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

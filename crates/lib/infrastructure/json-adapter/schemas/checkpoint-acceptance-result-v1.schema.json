@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Review Kit checkpoint acceptance result v1",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "run_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "status": {
+      "enum": [
+        "stored",
+        "existing"
+      ]
+    },
+    "reference": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^accepted/[0-9a-f]{64}/(policy-inventory|policy-applicability|review-assessment)\\.json$"
+    },
+    "manifest": {
+      "const": "review-run.json"
+    }
+  },
+  "required": [
+    "version",
+    "run_id",
+    "status",
+    "reference",
+    "path",
+    "manifest"
+  ],
+  "additionalProperties": false
+}

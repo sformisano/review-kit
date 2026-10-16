@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Learn Review Kit from one finding: its values, identity, policies, assessment, and publication.">
+  <title>Learn Review Kit · From finding to review</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="examples.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#lesson-content">Skip to the lesson</a>
+  <header class="site-header">
+    <a class="brand" href="#finding" aria-label="Review Kit, first lesson"><span class="brand-mark" aria-hidden="true">rk</span><span>Review Kit <span class="brand-subtitle">A field guide</span></span></a>
+    <a class="reference-link" href="../README.md">Documentation <span aria-hidden="true">↗</span></a>
+  </header>
+  <div class="page-layout">
+    <aside class="sidebar">
+      <p class="eyebrow">From finding to review</p>
+      <nav aria-label="Lessons" class="desktop-lessons">
+        <a href="#finding" aria-current="step"><span class="lesson-number">01</span><span>Start with a finding<small>Its values and construction</small></span></a>
+        <a href="#identity"><span class="lesson-number">02</span><span>Fix it. Keep F1.<small>Entities and value equality</small></span></a>
+        <a href="#policies"><span class="lesson-number">03</span><span>Choose the rules<small>Skills and judgments</small></span></a>
+        <a href="#assessment"><span class="lesson-number">04</span><span>Make an assessment<small>How the parts fit together</small></span></a>
+        <a href="#publication"><span class="lesson-number">05</span><span>Publish the review<small>Application flow and recovery</small></span></a>
+        <a href="#reading"><span class="lesson-number">06</span><span>Read the code<small>A route through the source</small></span></a>
+      </nav>
+      <label class="mobile-lessons">Lesson
+        <select id="lesson-select">
+          <option value="finding">01 · Start with a finding</option>
+          <option value="identity">02 · Fix it. Keep F1.</option>
+          <option value="policies">03 · Choose the rules</option>
+          <option value="assessment">04 · Make an assessment</option>
+          <option value="publication">05 · Publish the review</option>
+          <option value="reading">06 · Read the code</option>
+        </select>
+      </label>
+      <div class="sidebar-note"><span class="small-rule"></span><p>One example, all the way through.</p><p>A worker loses a job after a failed send. We’ll record it as F1, fix it, and follow the review to GitLab.</p></div>
+    </aside>
+    <main id="lesson-content" tabindex="-1">
+      <div class="lesson-meta"><span id="chapter-label">THE DOMAIN</span><span id="lesson-count">01 / 06</span></div>
+
+      <section id="finding" class="lesson" aria-labelledby="finding-heading">
+        <div class="lesson-heading"><h1 id="finding-heading" tabindex="-1">Start with a finding.</h1><p>An agent spots a bug: the worker acknowledges a job even when sending it fails. The queue then removes the job.</p></div>
+        <div class="finding-scene">
+          <div class="source-window">
+            <div class="window-label"><span>Example source</span><code>src/worker.rs</code></div>
+            <pre aria-label="Illustrative Rust: both success and failure acknowledge the job"><code><span class="code-line"><span class="line-no">40</span><span><span class="syntax-keyword">match</span> client.send(&amp;job) {</span></span><span class="code-line"><span class="line-no">41</span><span>    Ok(()) =&gt; queue.ack(job.id),</span></span><span class="code-line code-problem"><span class="line-no">42</span><span>    Err(_) =&gt; queue.ack(job.id),</span></span><span class="code-line"><span class="line-no">43</span><span>}</span></span></code></pre>
+            <p class="source-caption">Line 42 removes work that still needs to run.</p>
+          </div>
+          <div class="finding-sheet">
+            <div class="finding-sheet-top"><span class="finding-id">F1</span><span class="status open">Open</span></div>
+            <h2>A failed send loses the job</h2><p>The error branch acknowledges the job. It should leave the job available for retry.</p>
+            <div class="finding-tags"><span>P2</span><span>Blocking</span><code>error-handling</code></div>
+            <div class="sheet-location"><code>src/worker.rs:42</code><span>Finding</span></div>
+          </div>
+        </div>
+        <div class="section-intro"><h2>Look inside F1</h2><p>A <code>Finding</code> brings these values together. Choose a part to see what it holds.</p></div>
+        <div class="inspector">
+          <div class="choice-row" role="group" aria-label="Parts of a finding">
+            <button type="button" data-inspect="identity" aria-pressed="true">Identity</button>
+            <button type="button" data-inspect="location" aria-pressed="false">Location</button>
+            <button type="button" data-inspect="judgment" aria-pressed="false">Judgment</button>
+            <button type="button" data-inspect="evidence" aria-pressed="false">Evidence</button>
+            <button type="button" data-inspect="suggestion" aria-pressed="false">Suggestion</button>
+          </div>
+          <div id="finding-detail" class="inspection-detail" aria-live="polite"></div>
+        </div>
+        <div class="construction">
+          <div class="construction-route"><code>FindingDraft</code><span aria-hidden="true">→</span><code>Finding::new</code><span aria-hidden="true">→</span><code id="finding-construction-type">Finding</code></div>
+          <label class="check-control"><input id="blank-evidence" type="checkbox"> Remove the evidence</label>
+          <p id="finding-construction-result" class="construction-result" aria-live="polite">Accepted: title, body, and evidence are present.</p>
+        </div>
+        <p class="boundary-note">Construction checks the record’s shape. Checking whether the bug exists requires reading and testing the code.</p>
+        <details class="code-trail"><summary>Read this in Rust</summary><div><a href="../../crates/lib/domain/src/entities/finding.rs">finding.rs <span>FindingDraft, Finding::new, and their tests</span></a><a href="../../crates/lib/domain/src/values/source.rs">source.rs <span>SourceLocation, SourcePath, and Suggestion</span></a></div></details>
+      </section>
+
+      <section id="identity" class="lesson" aria-labelledby="identity-heading">
+        <div class="lesson-heading"><h1 id="identity-heading" tabindex="-1">Fix it. Keep F1.</h1><p>The next revision retries failed jobs. We reassess the same problem, so its finding ID stays 1.</p></div>
+        <div class="choice-row" role="group" aria-label="Finding lifecycle examples"><button type="button" data-lifecycle="open" aria-pressed="true">Before the fix</button><button type="button" data-lifecycle="fixed" aria-pressed="false">Apply the fix</button><button type="button" data-lifecycle="recurrence" aria-pressed="false">Bug returns</button></div>
+        <div class="identity-scene" aria-live="polite">
+          <div class="saved-assessment"><p class="object-label">Earlier Assessment <code>@ a1</code></p><div class="saved-finding"><span class="finding-id">F1</span><span class="status open">Open</span></div><p>A failed send loses the job.</p><div class="snapshot-foot">The earlier assessment keeps this state.</div></div>
+          <div class="identity-connector"><span aria-hidden="true">→</span><small>Reassess<br>the same finding</small></div>
+          <div class="current-finding"><p class="object-label">Reassessment <code id="current-revision">at a1</code></p><div class="saved-finding"><span class="finding-id">F1</span><span id="current-finding-status" class="status open">Open</span></div><p id="current-finding-evidence">The error branch acknowledges a failed job.</p><div class="snapshot-foot" id="lifecycle-foot">No transition yet.</div></div>
+        </div>
+        <div class="transition-record"><div><p class="object-label">FindingTransition</p><strong id="transition-direction">No change yet</strong></div><p id="transition-explanation">Choose “Apply the fix” to record a status change and its explanation.</p></div>
+        <div class="equality-lines"><div><code>before.id() == after.id()</code><span class="boolean true">true</span><p>Same problem.</p></div><div><code>before == after</code><span id="finding-equality" class="boolean true">true</span><p id="finding-equality-reason">Same recorded state.</p></div></div>
+        <div class="teaching-note"><span class="note-marker">Why an entity?</span><p><code>Finding</code> has an identity that survives changes to its state. That is what makes it an entity.</p><p><code>FindingId</code>, <code>SourceLocation</code>, and <code>FindingTransition</code> are values. Compare their contents to compare them.</p><p>The reviewed <code>Revision</code> belongs to the assessment. Reassessing F1 at a new revision produces a new assessment.</p></div>
+        <p class="boundary-note">F1 is scoped to the review subject and reviewer. It is separate from GitLab’s discussion and note IDs.</p>
+        <details class="code-trail"><summary>Read this in Rust</summary><div><a href="../../crates/lib/domain/src/entities/finding.rs">finding.rs <span>transition and the identity-preservation test</span></a><a href="../../crates/lib/domain/src/values/finding_transition.rs">finding_transition.rs <span>from, to, evidence, and recurrence</span></a><a href="../../crates/lib/domain/src/values/assessment.rs">assessment.rs <span>An immutable review snapshot</span></a></div></details>
+      </section>
+
+      <section id="policies" class="lesson" aria-labelledby="policies-heading">
+        <div class="lesson-heading"><h1 id="policies-heading" tabindex="-1">Choose the rules.</h1><p>F1 names the rule it violates: <code>error-handling</code>. That ID connects the problem to a named policy and its evaluation.</p></div>
+        <div class="catalog-heading"><h2>The available rules</h2><span>Agent policy list: <code>worker-review</code></span></div>
+        <div class="policy-catalog">
+          <div class="policy-definition required"><span class="policy-kind">Required</span><h3>Core review</h3><code>core-review</code><p>The policy-list skill asks the agent to include this.</p></div>
+          <div class="policy-definition"><span class="policy-kind">Agent can select</span><h3>Error handling</h3><code>error-handling</code><p>Failed work must remain recoverable.</p></div>
+          <div class="dependency-arrow"><span aria-hidden="true">→</span><small>requires proof</small></div>
+          <div class="policy-definition"><span class="policy-kind">Evidence rule</span><h3>Test evidence</h3><code>test-evidence</code><p>Check evidence for failure behavior.</p></div>
+        </div>
+        <div class="section-intro"><h2>The agent records each rule once</h2><p>The agent reads the linked skills and declares the policies it assesses. Review Kit adds no policies. One assessment contains each policy, its relevance and its result. <code>rkc accept</code> freezes that complete review.</p></div>
+        <div class="teaching-note"><p><code>review-assessment.draft.json</code> holds one row per policy: identity, required flag, reason and outcome. The outcome is excluded, unresolved, satisfied, violated or blocked. Missing judgments prevent acceptance.</p></div>
+        <div class="selection-workbench">
+          <label for="policy-request">Agent’s applicable policies</label><select id="policy-request"><option value="error-handling">Error-path review</option><option value="none">Core review only</option><option value="unknown">An additional policy</option></select>
+          <div class="selection-route" aria-hidden="true">↓ <code>AssessmentPolicies::new</code></div>
+          <div id="selection-result" aria-live="polite"></div>
+        </div>
+        <div class="teaching-note"><span class="note-marker">Skills and results</span><p>The agent reads ordinary skills and decides which rules apply. <code>PolicyId</code> identifies each rule in the assessment.</p><p><code>AssessmentPolicies</code> carries the declared IDs and display names. A <code>PolicyEvaluation</code> records satisfied, violated, or blocked.</p><p>F1 describes a particular problem. Its policy evaluation describes the judgment about the rule. They share a <code>PolicyId</code>.</p></div>
+        <p class="boundary-note">Acceptance checks the single assessment without loading skills or definitions. It cannot detect an omitted policy or show that a decision is right. Missing criteria or evidence require an explicit limitation. See the <a href="../../crates/bin/cli/README.md#assessment-acceptance">checkpoint contract</a>.</p>
+        <details class="code-trail"><summary>Read this in Rust</summary><div><a href="../../crates/lib/domain/src/values/policy_id.rs">policy_id.rs <span>The rule's identity</span></a><a href="../../crates/lib/application/src/use_cases/assessment/coverage.rs">coverage.rs <span>Agent-declared policy coverage</span></a><a href="../../crates/lib/application/src/use_cases/checkpoints/README.md">checkpoints <span>Combined policy declarations and assessment rules</span></a></div></details>
+      </section>
+
+      <section id="assessment" class="lesson" aria-labelledby="assessment-heading">
+        <div class="lesson-heading"><h1 id="assessment-heading" tabindex="-1">Make an assessment.</h1><p>A finding explains one problem. An <code>Assessment</code> brings the review context, selected policies, evaluations, findings, and the agent’s overall decision together.</p></div>
+        <label class="scenario-select" for="assessment-example">Try a draft<select id="assessment-example"><option value="original">Original review</option><option value="premature">Call the original review ready</option><option value="fixed">Fix verified</option><option value="missing">Leave out an evaluation</option><option value="blocked">Cannot verify the fix</option><option value="no-limitation">Leave out the overall limitation</option></select></label>
+        <div class="assessment-scene" aria-live="polite">
+          <div class="assessment-record">
+            <div class="record-heading"><h2>AssessmentDraft</h2><code id="assessment-revision">Revision a1</code></div>
+            <dl class="review-context"><div><dt>Subject</dt><dd>GitLab · example/worker · !17</dd></div><div><dt>ReviewerId</dt><dd>agent-a</dd></div><div><dt>Depth / scope</dt><dd>Focused / worker error path</dd></div></dl>
+            <div class="assessment-part"><h3>Selected policies &amp; evaluations</h3><div id="assessment-evaluations"></div></div>
+            <div class="assessment-part"><h3>Findings</h3><div class="assessment-finding"><span class="finding-id">F1</span><div><strong>A failed send loses the job</strong><small><code>error-handling</code> · Blocking · validation claim: true</small></div><span id="assessment-finding-status" class="status open">Open</span></div></div>
+            <div class="assessment-decision"><span>Agent’s decision</span><strong id="assessment-decision">ChangesRequired</strong></div>
+            <p id="assessment-limitation" class="assessment-limitation" hidden></p>
+          </div>
+          <div class="constructor-verdict"><p class="object-label">Assessment::new</p><span class="verdict-mark" id="verdict-mark" aria-hidden="true">✓</span><h2 id="assessment-result-title">Accepted</h2><div id="assessment-result-detail"></div></div>
+        </div>
+        <p class="boundary-note">The agent supplies the decision. The constructor rejects contradictions and collects errors. It cannot prove that the review is correct.</p>
+        <div class="section-intro"><h2>How the application gets here</h2></div>
+        <ol class="preparation-flow"><li><code>AssessmentPolicies::new</code><p>Take the policy IDs and public names from the accepted assessment and validate them.</p></li><li><code>assessment::prepare</code><p>Use the provider snapshot and prior findings to create slots for fresh judgments and reassessments.</p></li><li><code>assessment::complete</code><p>Require those inputs, check the declared coverage, and construct the domain assessment.</p></li></ol>
+        <div class="teaching-note"><span class="note-marker">Why a value?</span><p>An <code>Assessment</code> has no independent identity. It is an immutable record for a reviewed revision; equality compares its complete contents.</p><p>It owns its findings. Changing a separate copy of F1 leaves the earlier assessment unchanged. A follow-up builds another assessment.</p></div>
+        <details class="code-trail"><summary>Read this in Rust</summary><div><a href="../../crates/lib/domain/src/values/assessment.rs">assessment.rs <span>AssessmentDraft, Assessment::new, and validate_decision</span></a><a href="../../crates/lib/domain/src/values/assessment/tests.rs">assessment/tests.rs <span>Accepted records and independent contradictions</span></a><a href="../../crates/lib/application/src/use_cases/assessment/mod.rs">assessment/mod.rs <span>prepare and complete</span></a></div></details>
+      </section>
+
+      <section id="publication" class="lesson" aria-labelledby="publication-heading">
+        <div class="lesson-heading"><h1 id="publication-heading" tabindex="-1">Publish the review.</h1><p>The domain records judgments without I/O. The application plans and verifies effects through ports. The GitLab adapter performs HTTP calls.</p></div>
+        <label class="scenario-select" for="publication-example">Follow a case<select id="publication-example"><option value="initial">First publication</option><option value="unchanged">Unchanged completed review</option><option value="fix">Follow-up: F1 is fixed</option><option value="lost">Finding POST response is lost</option><option value="unknown-update">Summary PUT response is lost</option></select></label>
+        <div class="publication-workbench">
+          <ol id="publication-trace" class="publication-trace" aria-label="Publication steps"></ol>
+          <div class="publication-detail" aria-live="polite"><p id="publication-stage-label" class="object-label">Before publication</p><h2 id="publication-stage-title"></h2><p id="publication-stage-description"></p><div class="observed-state"><span>What we know</span><p id="publication-observation"></p></div><p id="publication-lesson" class="publication-lesson"></p></div>
+        </div>
+        <div class="step-controls"><button id="publication-back" type="button" class="button-secondary" disabled>← Back</button><span id="publication-step-count">Step 1 of 5</span><button id="publication-next" type="button" class="button-primary">Next step →</button></div>
+        <div class="teaching-note"><span class="note-marker">Two different states</span><p><code>ReviewDecision</code> answers what the agent concludes about the code. <code>RoundStatus</code> records publication progress.</p><p>A review can require changes and still be published completely. A ready assessment can have an unfinished publication.</p></div>
+        <p class="boundary-note">The CLI keeps <code>PublicationProgress</code> in a journal bound to one review run. Recovery runs <code>rkc publish</code> again on that run, from its frozen assessment. See <a href="../../crates/bin/cli/README.md#local-run-state-and-the-journal">the run and its journal</a>.</p>
+        <details class="code-trail"><summary>Read this in Rust</summary><div><a href="../../crates/lib/application/src/publication.rs">publication.rs <span>Round, effects, and publication records</span></a><a href="../../crates/lib/application/src/use_cases/publishing/mod.rs">publishing/mod.rs <span>Publication orchestration and retained progress</span></a><a href="../../crates/lib/application/tests/review_workflow.rs">review_workflow.rs <span>Pending barrier, unchanged reruns, fix ordering, and lost responses</span></a></div></details>
+      </section>
+
+      <section id="reading" class="lesson" aria-labelledby="reading-heading">
+        <div class="lesson-heading"><h1 id="reading-heading" tabindex="-1">Read the code with F1 in mind.</h1><p>Follow the constructors and the tests beside them. You already know the example each type needs to represent.</p></div>
+        <div class="reading-path">
+          <a href="../../crates/lib/domain/src/entities/finding.rs"><span class="reading-number">01</span><div><h2>One problem and its values</h2><code>domain / entities / finding.rs</code><p>Read FindingDraft, Finding::new, and transition. Follow SourceLocation and Suggestion into source.rs.</p></div><span aria-hidden="true">↗</span></a>
+          <a href="../../crates/lib/application/src/use_cases/assessment/coverage.rs"><span class="reading-number">02</span><div><h2>The rules behind the review</h2><code>application / assessment / coverage.rs</code><p>Read AssessmentPolicies to see how declared IDs and names are checked without loading policy definitions.</p></div><span aria-hidden="true">↗</span></a>
+          <a href="../../crates/lib/domain/src/values/assessment.rs"><span class="reading-number">03</span><div><h2>One complete review record</h2><code>domain / values / assessment.rs</code><p>Read AssessmentDraft, Assessment::new, and validate_decision. The tests show which combinations are accepted.</p></div><span aria-hidden="true">↗</span></a>
+          <a href="../../crates/lib/application/src/use_cases/assessment/mod.rs"><span class="reading-number">04</span><div><h2>Fresh judgments from prior state</h2><code>application / use_cases / assessment / mod.rs</code><p>Follow prepare into complete. See what comes from the provider snapshot and what the agent must supply again.</p></div><span aria-hidden="true">↗</span></a>
+          <a href="../../crates/lib/application/tests/review_workflow.rs"><span class="reading-number">05</span><div><h2>The review as a sequence of effects</h2><code>application / tests / review_workflow.rs</code><p>Start with initial_review_verifies_pending_before_finding_then_completes. Then read the unchanged, fixed, and lost-response cases.</p></div><span aria-hidden="true">↗</span></a>
+          <a href="../../crates/lib/infrastructure/gitlab-adapter/README.md"><span class="reading-number">06</span><div><h2>Where GitLab enters</h2><code>gitlab / README.md</code><p>Read the adapter contracts before the HTTP implementation. Keep ownership, revisions, and uncertain writes in view.</p></div><span aria-hidden="true">↗</span></a>
+        </div>
+        <div class="reference-shelf"><h2>Keep these nearby</h2><a href="../../crates/bin/cli/README.md">Run this with rkc <span>Installation, configuration and exact commands</span></a><a href="../../crates/lib/domain/README.md">Domain contracts <span>Full validation rules</span></a><a href="../../crates/lib/application/README.md">Application contracts <span>Use cases and recovery limits</span></a><a href="../plan.md#current-status">Current implementation status <span>Implemented components and verification limits</span></a></div>
+      </section>
+
+      <footer class="lesson-footer"><a id="previous-lesson" href="#finding" class="previous-lesson" hidden>← Previous lesson</a><a id="next-lesson" href="#identity" class="next-lesson">Next: Fix it. Keep F1. <span aria-hidden="true">→</span></a></footer>
+      <p class="page-footnote">Illustrative source, revisions, and policy list. Controls replay teaching examples; this page does not call Rust or GitLab. Contracts live in the linked crate READMEs.</p>
+      <noscript><p class="no-script">JavaScript enables the examples and lesson navigation. All lessons are available below without it.</p></noscript>
+    </main>
+  </div>
+</body>
+</html>

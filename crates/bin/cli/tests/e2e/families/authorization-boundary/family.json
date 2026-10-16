@@ -1,0 +1,18 @@
+{
+  "schema_version": "fixture-family/v1",
+  "project": "document-service",
+  "base_message": "Initialize the document service",
+  "merge_requests": [
+    {
+      "label": "review",
+      "branch": "document-archiving",
+      "overlay": "archive-and-listing",
+      "title": "Add document archiving and paged listings",
+      "description": "Adds `DocumentService.archive` for administrators and `DocumentService.list_documents`.\n\nThe README describes the access rules. Run `python3 -m unittest discover -s tests -t .` offline."
+    }
+  ],
+  "overlays": {
+    "archive-and-listing": {"message": "Add document archiving and paged listings"},
+    "archive-permission-check": {"message": "Check archive permission through require"}
+  }
+}

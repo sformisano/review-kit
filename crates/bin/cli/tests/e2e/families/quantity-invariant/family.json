@@ -1,0 +1,46 @@
+{
+  "schema_version": "fixture-family/v1",
+  "project": "quantity-ledger",
+  "base_message": "Initialize the quantity ledger",
+  "merge_requests": [
+    {
+      "label": "review",
+      "branch": "quantity-text-and-removal",
+      "overlay": "text-and-removal",
+      "title": "Parse quantities from text and remove stock from bins",
+      "description": "Adds `FromStr` for `Quantity`, `Quantity::checked_sub` and `Ledger::remove`.\n\nThe README describes the library contract. Run `cargo test` offline."
+    },
+    {
+      "label": "limit",
+      "branch": "quantity-limit",
+      "overlay": "limit-copies",
+      "title": "Limit quantities to one million items",
+      "description": "Adds `Quantity::LIMIT`, `Quantity::checked_mul` and `Quantity::needs_pallet`. Construction and arithmetic reject values above the limit.\n\nThe README describes the library contract. Run `cargo test` offline."
+    },
+    {
+      "label": "cap",
+      "branch": "quantity-cap",
+      "overlay": "limit-owner",
+      "title": "Cap quantities at one million items",
+      "description": "Adds `Quantity::LIMIT`, `Quantity::checked_mul` and `Quantity::needs_pallet`. Construction and arithmetic reject values above the limit.\n\nThe README describes the library contract. Run `cargo test` offline."
+    },
+    {
+      "label": "totals",
+      "branch": "quantity-totals",
+      "overlay": "quantity-totals",
+      "title": "Add quantity totals",
+      "description": "Adds `Quantity::total` for summing the quantities of several stock receipts, with tests for ordinary totals, empty lists and overflow.\n\nThe README describes the library contract. Run `cargo test` offline."
+    }
+  ],
+  "overlays": {
+    "text-and-removal": {"message": "Parse quantities and remove stock from bins"},
+    "parse-through-constructor": {"message": "Build parsed quantities through the constructor"},
+    "subtraction-through-constructor": {"message": "Build subtraction results through the constructor"},
+    "digit-parsing-helper": {"message": "Extract decimal digit parsing into a helper"},
+    "bin-transfer": {"message": "Move stock between bins"},
+    "changelog": {"message": "Start a changelog"},
+    "limit-copies": {"message": "Limit quantities to one million items"},
+    "limit-owner": {"message": "Cap quantities at one million items"},
+    "quantity-totals": {"message": "Add quantity totals"}
+  }
+}

@@ -1,0 +1,10 @@
+profile:
+  id: retry-schedule-review
+  display_name: Retry Schedule review
+catalogs:
+  ai-skills:
+    source: http://127.0.0.1:18731/ai-skills.git
+entries:
+- catalog_id: ai-skills
+  kind: stack
+  slug: codebase-review-workflows

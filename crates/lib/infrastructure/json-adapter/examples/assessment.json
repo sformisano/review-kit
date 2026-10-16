@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "kind": "assessment",
+  "context": "context.json",
+  "subject": {
+    "provider": "gitlab",
+    "host": "https://gitlab.example.test",
+    "repository": "team/project",
+    "request": 1
+  },
+  "reviewer": "9",
+  "revision": {
+    "head": "1111111111111111111111111111111111111111",
+    "comparison": [
+      "2222222222222222222222222222222222222222",
+      "3333333333333333333333333333333333333333"
+    ]
+  },
+  "policy_set": "rust",
+  "policies": [
+    {
+      "policy_id": "proof",
+      "judgment": null,
+      "name": "proof"
+    }
+  ],
+  "findings": [],
+  "new_findings": [],
+  "decision": null,
+  "depth": null,
+  "scope": null,
+  "limitation": null,
+  "answers": [],
+  "transitions": [],
+  "local_context": ""
+}

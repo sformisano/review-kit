@@ -1,0 +1,5 @@
+error: observed_port moves facade declarations into a child module; use imported or crate:: paths instead of super::
+ --> tests/ui/unsupported_port_parent_projection.rs:8:48
+  |
+8 | ...   #[operation(name = "relative", input = super::input(), output = |_| review_kit_observation::Completion::success(review_kit_obse...
+  |                                              ^^^^^

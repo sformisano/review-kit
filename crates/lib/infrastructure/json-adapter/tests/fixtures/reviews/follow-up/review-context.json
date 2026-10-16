@@ -1,0 +1,278 @@
+{
+  "version": 1,
+  "kind": "context",
+  "snapshot": {
+    "subject": {
+      "provider": "gitlab",
+      "host": "https://gitlab.example.test",
+      "repository": "team/project",
+      "request": 1
+    },
+    "reviewer": "9",
+    "revision": {
+      "head": "4444444444444444444444444444444444444444",
+      "comparison": [
+        "2222222222222222222222222222222222222222",
+        "3333333333333333333333333333333333333333"
+      ]
+    },
+    "summaries": [
+      {
+        "id": "fixture-summary",
+        "author": "9",
+        "body": "Illustrative managed review summary.",
+        "current": {
+          "number": 1,
+          "assessment": {
+            "subject": {
+              "provider": "gitlab",
+              "host": "https://gitlab.example.test",
+              "repository": "team/project",
+              "request": 1
+            },
+            "reviewer": "9",
+            "revision": {
+              "head": "1111111111111111111111111111111111111111",
+              "comparison": [
+                "2222222222222222222222222222222222222222",
+                "3333333333333333333333333333333333333333"
+              ]
+            },
+            "decision": "changes_required",
+            "depth": "Source analysis of the constructor, new decoding path and fixture tests.",
+            "scope": "The quantity JSON-input change and its positive-value contract.",
+            "limitation": null,
+            "selected_policies": [
+              "baseline-integrity-policy",
+              "baseline-proof-policy",
+              "review-baseline-policy",
+              "rust-invariant-preservation"
+            ],
+            "evaluations": [
+              {
+                "policy_id": "baseline-integrity-policy",
+                "judgment": {
+                  "kind": "satisfied"
+                }
+              },
+              {
+                "policy_id": "baseline-proof-policy",
+                "judgment": {
+                  "kind": "satisfied"
+                }
+              },
+              {
+                "policy_id": "review-baseline-policy",
+                "judgment": {
+                  "kind": "violated",
+                  "evidence": "Quantity::new rejects zero, but derived Deserialize writes the private value field without calling that constructor. The new JSON input therefore admits {\"value\":0}."
+                }
+              },
+              {
+                "policy_id": "rust-invariant-preservation",
+                "judgment": {
+                  "kind": "violated",
+                  "evidence": "Quantity::new rejects zero, but derived Deserialize writes the private value field without calling that constructor. The new JSON input therefore admits {\"value\":0}."
+                }
+              }
+            ],
+            "findings": [
+              {
+                "id": 1,
+                "policy_id": "rust-invariant-preservation",
+                "title": "Validate quantities during JSON deserialization",
+                "body": "JSON input can construct a zero quantity even though Quantity::new rejects zero. Route deserialization through the constructor to preserve the documented positive-value guarantee.",
+                "severity": "p2",
+                "disposition": "blocking",
+                "status": "open",
+                "evidence": "Quantity::new rejects zero, but derived Deserialize writes the private value field without calling that constructor. The new JSON input therefore admits {\"value\":0}.",
+                "validated": true,
+                "location": {
+                  "path": "src/quantity.rs",
+                  "line": 3
+                },
+                "suggestion": null
+              }
+            ]
+          },
+          "status": "completed",
+          "answers": [],
+          "transitions": [],
+          "answer_targets": [],
+          "actions": [
+            {
+              "kind": "finding",
+              "finding": {
+                "id": 1,
+                "policy_id": "rust-invariant-preservation",
+                "title": "Validate quantities during JSON deserialization",
+                "body": "JSON input can construct a zero quantity even though Quantity::new rejects zero. Route deserialization through the constructor to preserve the documented positive-value guarantee.",
+                "severity": "p2",
+                "disposition": "blocking",
+                "status": "open",
+                "evidence": "Quantity::new rejects zero, but derived Deserialize writes the private value field without calling that constructor. The new JSON input therefore admits {\"value\":0}.",
+                "validated": true,
+                "location": {
+                  "path": "src/quantity.rs",
+                  "line": 3
+                },
+                "suggestion": null
+              },
+              "body": "JSON input can construct a zero quantity even though Quantity::new rejects zero. Route deserialization through the constructor to preserve the documented positive-value guarantee."
+            }
+          ],
+          "policy_set": "Quantity review policies",
+          "policy_names": [
+            {
+              "id": "baseline-integrity-policy",
+              "name": "Baseline integrity"
+            },
+            {
+              "id": "baseline-proof-policy",
+              "name": "Baseline proof"
+            },
+            {
+              "id": "review-baseline-policy",
+              "name": "General review"
+            },
+            {
+              "id": "rust-invariant-preservation",
+              "name": "Rust invariant preservation"
+            }
+          ],
+          "communicated_findings": [
+            {
+              "finding": {
+                "id": 1,
+                "policy_id": "rust-invariant-preservation",
+                "title": "Validate quantities during JSON deserialization",
+                "body": "JSON input can construct a zero quantity even though Quantity::new rejects zero. Route deserialization through the constructor to preserve the documented positive-value guarantee.",
+                "severity": "p2",
+                "disposition": "blocking",
+                "status": "open",
+                "evidence": "Quantity::new rejects zero, but derived Deserialize writes the private value field without calling that constructor. The new JSON input therefore admits {\"value\":0}.",
+                "validated": true,
+                "location": {
+                  "path": "src/quantity.rs",
+                  "line": 3
+                },
+                "suggestion": null
+              },
+              "root_note": "fixture-root-note-1",
+              "thread": "fixture-thread-1",
+              "actions": []
+            }
+          ],
+          "policy_declarations": [
+            {
+              "policy": {
+                "id": "baseline-integrity-policy",
+                "name": "Baseline integrity"
+              },
+              "status": "applicable",
+              "reason": "Required. Compare the quantity change with the positive-value contract and its baseline."
+            },
+            {
+              "policy": {
+                "id": "baseline-proof-policy",
+                "name": "Baseline proof"
+              },
+              "status": "applicable",
+              "reason": "Required. Judge whether current evidence supports the review conclusions."
+            },
+            {
+              "policy": {
+                "id": "review-baseline-policy",
+                "name": "General review"
+              },
+              "status": "applicable",
+              "reason": "Required by the review workflow. Check changed behavior for concrete defects."
+            },
+            {
+              "policy": {
+                "id": "rust-invariant-preservation",
+                "name": "Rust invariant preservation"
+              },
+              "status": "applicable",
+              "reason": "The change introduces a new deserialization path for a value constrained by its constructor."
+            },
+            {
+              "policy": {
+                "id": "frontend-experience-policy",
+                "name": "Frontend experience"
+              },
+              "status": "excluded",
+              "reason": "The change modifies decoding only. Planned source inspection and review output do not change or exercise a user interface."
+            }
+          ],
+          "confirmed_validation": true
+        },
+        "history": []
+      }
+    ],
+    "findings": [
+      {
+        "id": "fixture-thread-1",
+        "root_note": "fixture-root-note-1",
+        "author": "9",
+        "created_in": 1,
+        "revision": {
+          "head": "1111111111111111111111111111111111111111",
+          "comparison": [
+            "2222222222222222222222222222222222222222",
+            "3333333333333333333333333333333333333333"
+          ]
+        },
+        "finding": {
+          "id": 1,
+          "policy_id": "rust-invariant-preservation",
+          "title": "Validate quantities during JSON deserialization",
+          "body": "JSON input can construct a zero quantity even though Quantity::new rejects zero. Route deserialization through the constructor to preserve the documented positive-value guarantee.",
+          "severity": "p2",
+          "disposition": "blocking",
+          "status": "open",
+          "evidence": "Quantity::new rejects zero, but derived Deserialize writes the private value field without calling that constructor. The new JSON input therefore admits {\"value\":0}.",
+          "validated": true,
+          "location": {
+            "path": "src/quantity.rs",
+            "line": 3
+          },
+          "suggestion": null
+        },
+        "body": "JSON input can construct a zero quantity even though Quantity::new rejects zero. Route deserialization through the constructor to preserve the documented positive-value guarantee.",
+        "resolved": false
+      }
+    ],
+    "replies": [],
+    "permissions": [
+      "create_summary",
+      "update_summary",
+      "finding",
+      "reply",
+      "resolve",
+      "reopen"
+    ]
+  },
+  "changes": {
+    "subject": {
+      "provider": "gitlab",
+      "host": "https://gitlab.example.test",
+      "repository": "team/project",
+      "request": 1
+    },
+    "revision": {
+      "head": "4444444444444444444444444444444444444444",
+      "comparison": [
+        "2222222222222222222222222222222222222222",
+        "3333333333333333333333333333333333333333"
+      ]
+    },
+    "files": [
+      {
+        "kind": "modified",
+        "path": "src/quantity.rs"
+      }
+    ],
+    "unified_diff": "diff --git a/src/quantity.rs b/src/quantity.rs\n--- a/src/quantity.rs\n+++ b/src/quantity.rs\n@@ -1,6 +1,7 @@\n-use serde::Serialize;\n+use serde::{Deserialize, Serialize};\n \n-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]\n+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]\n+#[serde(try_from = \"QuantityInput\")]\n pub struct Quantity {\n     value: u32,\n }\n@@ -42,3 +43,26 @@\n         assert_eq!(serde_json::to_value(quantity).unwrap(), serde_json::json!({\"value\": 3}));\n     }\n }\n+\n+#[cfg(test)]\n+mod json_input_tests {\n+    use super::*;\n+    #[test]\n+    fn reads_positive_quantity() {\n+        let quantity: Quantity = serde_json::from_str(r#\"{\"value\": 3}\"#).unwrap();\n+        assert_eq!(quantity.get(), 3);\n+    }\n+}\n+\n+#[derive(Deserialize)]\n+struct QuantityInput {\n+    value: u32,\n+}\n+\n+impl TryFrom<QuantityInput> for Quantity {\n+    type Error = QuantityError;\n+\n+    fn try_from(input: QuantityInput) -> Result<Self, Self::Error> {\n+        Self::new(input.value)\n+    }\n+}\n"
+  }
+}

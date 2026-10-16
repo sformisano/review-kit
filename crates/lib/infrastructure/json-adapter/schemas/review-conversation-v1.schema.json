@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Review Kit v1 supported merge-request conversation",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "kind": {
+      "const": "review_conversation"
+    },
+    "subject": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "repository": {
+          "type": "string"
+        },
+        "request": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "provider",
+        "host",
+        "repository",
+        "request"
+      ],
+      "additionalProperties": false
+    },
+    "observed_at": {
+      "description": "Capture time in RFC 3339 UTC. Not compared for freshness.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
+    },
+    "title": {
+      "description": "Merge-request title.",
+      "type": "string"
+    },
+    "description": {
+      "description": "Merge-request description. A null provider description is retained as an empty string.",
+      "type": "string"
+    },
+    "discussions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "resolvable": {
+            "type": "boolean",
+            "description": "True when any provider note in the discussion is resolvable."
+          },
+          "resolved": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when not resolvable; otherwise true only when every resolvable note is resolved."
+          },
+          "notes": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "author": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "description": "Provider user ID of the API author, including bot users."
+                },
+                "body": {
+                  "type": "string"
+                },
+                "position": {
+                  "description": "Verbatim provider position object, including paths, commit references and line/range/image coordinates. Null for a note without an anchor.",
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "author",
+                "body",
+                "position"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "id",
+          "resolvable",
+          "resolved",
+          "notes"
+        ],
+        "additionalProperties": false,
+        "description": "A discussion with at least one supported non-system note. Discussion IDs are unique and note IDs are unique across the document.",
+        "if": {
+          "properties": {
+            "resolvable": {
+              "const": false
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "resolved": {
+              "type": "null"
+            }
+          }
+        },
+        "else": {
+          "properties": {
+            "resolved": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "version",
+    "kind",
+    "subject",
+    "observed_at",
+    "title",
+    "description",
+    "discussions"
+  ],
+  "additionalProperties": false
+}

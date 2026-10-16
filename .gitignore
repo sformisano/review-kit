@@ -1,0 +1,8 @@
+/target/
+.DS_Store
+/.agents/skills/
+/.claude/skills/
+/.cursor/skills/
+/.skillcatalog/skillcatalog.local.yml
+/tests/gitlab/.local/
+/tests/cli/.local/

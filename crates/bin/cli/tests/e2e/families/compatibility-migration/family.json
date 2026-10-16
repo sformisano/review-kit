@@ -1,0 +1,25 @@
+{
+  "schema_version": "fixture-family/v1",
+  "project": "profile-store",
+  "base_message": "Initialize the profile store",
+  "merge_requests": [
+    {
+      "label": "locale",
+      "branch": "profile-locale",
+      "overlay": "locale-field",
+      "title": "Store a locale with each profile",
+      "description": "Adds `Profile.locale` and stored profile format 2.\n\nThe stored format contract is `docs/storage-format.md`. Run `python3 -m unittest discover -s tests -t .` offline."
+    },
+    {
+      "label": "locale-upgrade",
+      "branch": "profile-locale-upgrade",
+      "overlay": "locale-field-upgrade",
+      "title": "Store a locale with each profile and upgrade format 1",
+      "description": "Adds `Profile.locale`, stored profile format 2 and the upgrade from format 1.\n\nThe stored format contract is `docs/storage-format.md`. Run `python3 -m unittest discover -s tests -t .` offline."
+    }
+  ],
+  "overlays": {
+    "locale-field": {"message": "Store profile locales in format 2"},
+    "locale-field-upgrade": {"message": "Store profile locales in format 2 with a format 1 upgrade"}
+  }
+}

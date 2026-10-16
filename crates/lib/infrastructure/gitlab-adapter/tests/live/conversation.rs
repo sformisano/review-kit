@@ -1,0 +1,314 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use reqwest::Method;
+use review_kit_application::{
+    conversation::{ConversationChange, Resolution},
+    publication::ProviderId,
+};
+use review_kit_json_adapter::{ConversationDocument, encode};
+use serde_json::{Value, json};
+
+use super::{fixture::Fixture, service::GitLabService};
+
+/// The civil UTC date `days` after today, as `YYYY-MM-DD`.
+fn date_after(days: u64) -> String {
+    let today = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        / 86_400;
+    // Proleptic Gregorian conversion from days since 1970-01-01.
+    let z = (today + days) as i64 + 719_468;
+    let era = z.div_euclid(146_097);
+    let day_of_era = z - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let shifted_month = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * shifted_month + 2) / 5 + 1;
+    let month = if shifted_month < 10 {
+        shifted_month + 3
+    } else {
+        shifted_month - 9
+    };
+    let year = year_of_era + era * 400 + i64::from(month <= 2);
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
+/// The supported conversation derived directly from raw REST discussions,
+/// without adapter code.
+fn expected_discussions(discussions: &[Value]) -> Vec<Value> {
+    let mut expected: Vec<Value> = discussions
+        .iter()
+        .filter_map(|discussion| {
+            let all = discussion["notes"].as_array().unwrap();
+            let mut notes: Vec<Value> = all
+                .iter()
+                .filter(|note| note["system"] == false)
+                .map(|note| {
+                    json!({
+                        "id": note["id"].as_u64().unwrap().to_string(),
+                        "author": note["author"]["id"].as_u64().unwrap().to_string(),
+                        "body": note["body"],
+                        "position": note.get("position").cloned().unwrap_or(Value::Null),
+                    })
+                })
+                .collect();
+            if notes.is_empty() {
+                return None;
+            }
+            notes.sort_by_key(|note| note["id"].as_str().unwrap().to_owned());
+            let resolvable: Vec<_> = all
+                .iter()
+                .filter(|note| note["resolvable"] == true)
+                .collect();
+            let resolved = if resolvable.is_empty() {
+                Value::Null
+            } else {
+                resolvable
+                    .iter()
+                    .all(|note| note["resolved"] == true)
+                    .into()
+            };
+            Some(json!({
+                "id": discussion["id"],
+                "resolvable": !resolvable.is_empty(),
+                "resolved": resolved,
+                "notes": notes,
+            }))
+        })
+        .collect();
+    expected.sort_by_key(|discussion| discussion["id"].as_str().unwrap().to_owned());
+    expected
+}
+
+fn sorted(mut discussions: Vec<Value>) -> Vec<Value> {
+    for discussion in &mut discussions {
+        discussion["notes"]
+            .as_array_mut()
+            .unwrap()
+            .sort_by_key(|note| note["id"].as_str().unwrap().to_owned());
+    }
+    discussions.sort_by_key(|discussion| discussion["id"].as_str().unwrap().to_owned());
+    discussions
+}
+
+fn id(value: &Value) -> ProviderId {
+    let text = match value {
+        Value::String(text) => text.clone(),
+        other => other.to_string(),
+    };
+    ProviderId::new(text).unwrap()
+}
+
+// D09, F14, F17 and F23 against a real server: general, bot, unmanaged inline
+// and resolvable thread notes beyond the first discussions page are captured
+// as context with verbatim positions; system notes are excluded; edits and
+// deletions are reflected; a later edit and resolution change are differences.
+pub fn conversation_capture_matches_independent_rest_reads(service: &GitLabService) {
+    let mut fixture = Fixture::new(service);
+    let commenter = fixture.add_user("commenter", 30);
+    let bot = fixture.add_project_bot(&date_after(30));
+    // A pushed commit adds a system-only discussion.
+    fixture.push_prefix();
+    let path = fixture.mr_path();
+    let initial = fixture.admin.get(&path);
+    println!("Initial description: {}", initial["description"]);
+    fixture.author.api.call(
+        Method::PUT,
+        &path,
+        json!({"title":"Conversation capture verification",
+            "description":"Capture every supported note.\n\nIncluding *Markdown*."}),
+    );
+    let notes = format!("{path}/notes");
+    let threads = format!("{path}/discussions");
+    let filler = |fixture: &Fixture, range: std::ops::Range<usize>| {
+        for index in range {
+            let api = if index % 2 == 0 {
+                &commenter.api
+            } else {
+                &fixture.author.api
+            };
+            api.post(&notes, json!({"body":format!("General note {index}")}));
+        }
+    };
+    filler(&fixture, 0..101);
+
+    let refs = fixture.admin.get(&path)["diff_refs"].clone();
+    let inline = commenter.api.post(
+        &threads,
+        json!({"body":"Unmanaged inline note about this added line.","position":{
+            "position_type":"text","base_sha":refs["base_sha"],"start_sha":refs["start_sha"],
+            "head_sha":refs["head_sha"],"old_path":"src/lib.rs","new_path":"src/lib.rs","new_line":4}}),
+    );
+    let inline_id = inline["id"].as_str().unwrap().to_owned();
+    fixture.reviewer.api.post(
+        &format!("{threads}/{inline_id}/notes"),
+        json!({"body":"Reply inside the inline thread."}),
+    );
+    let thread = fixture
+        .author
+        .api
+        .post(&threads, json!({"body":"Resolvable general thread."}));
+    let thread_id = thread["id"].as_str().unwrap().to_owned();
+    commenter.api.post(
+        &format!("{threads}/{thread_id}/notes"),
+        json!({"body":"Answered in the description."}),
+    );
+    fixture.author.api.call(
+        Method::PUT,
+        &format!("{threads}/{thread_id}"),
+        json!({"resolved":true}),
+    );
+    let bot_note = bot.as_ref().map(|bot| {
+        bot.api
+            .post(&notes, json!({"body":"Automated pipeline report."}))["id"]
+            .as_u64()
+            .unwrap()
+    });
+    let edited = commenter
+        .api
+        .post(&notes, json!({"body":"Original wording."}))["id"]
+        .as_u64()
+        .unwrap();
+    commenter.api.call(
+        Method::PUT,
+        &format!("{notes}/{edited}"),
+        json!({"body":"Edited wording."}),
+    );
+    let deleted = commenter
+        .api
+        .post(&notes, json!({"body":"Note that is deleted."}))["id"]
+        .as_u64()
+        .unwrap();
+    commenter.api.delete(&format!("{notes}/{deleted}"));
+    filler(&fixture, 101..202);
+
+    let client = fixture.connect();
+    let captured = client.capture_conversation(client.subject()).unwrap();
+    let raw = fixture.discussions();
+    let request = fixture.admin.get(&path);
+
+    assert!(
+        raw.len() > 200,
+        "fixture must span several discussion pages"
+    );
+    let system_only = raw
+        .iter()
+        .filter(|discussion| {
+            discussion["notes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|note| note["system"] == true)
+        })
+        .count();
+    assert!(
+        system_only > 0,
+        "fixture must contain system-only discussions"
+    );
+    let first_page = fixture.admin.get(&format!("{threads}?per_page=100&page=1"));
+    let first_page: Vec<_> = first_page
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|discussion| discussion["id"].clone())
+        .collect();
+    assert_eq!(first_page.len(), 100);
+    assert!(!first_page.contains(&inline_id.clone().into()));
+    assert!(!first_page.contains(&thread_id.clone().into()));
+
+    assert_eq!(captured.subject(), client.subject());
+    assert_eq!(captured.title(), request["title"]);
+    assert_eq!(captured.description(), request["description"]);
+    let document = ConversationDocument::new(&captured, "2026-10-13T12:00:00Z".into()).unwrap();
+    let document: Value = serde_json::from_slice(&encode(&document).unwrap()).unwrap();
+    let stored = sorted(document["discussions"].as_array().unwrap().clone());
+    assert_eq!(stored, expected_discussions(&raw));
+    assert_eq!(
+        stored.len() + system_only,
+        raw.len(),
+        "only system-only discussions are omitted"
+    );
+
+    let find = |discussion: &str| {
+        captured
+            .discussions()
+            .iter()
+            .find(|candidate| candidate.id().as_str() == discussion)
+            .unwrap()
+    };
+    let inline = find(&inline_id);
+    assert_eq!(inline.resolution(), Resolution::Unresolved);
+    assert_eq!(inline.notes().len(), 2);
+    assert_eq!(inline.notes()[0].author.as_str(), commenter.id.to_string());
+    let raw_position = raw
+        .iter()
+        .find(|discussion| discussion["id"] == inline_id.as_str())
+        .unwrap()["notes"][0]["position"]
+        .clone();
+    println!("Retained inline position: {raw_position}");
+    assert_eq!(raw_position["new_line"], 4);
+    assert_eq!(raw_position["head_sha"], refs["head_sha"]);
+    assert_eq!(find(&thread_id).resolution(), Resolution::Resolved);
+    let note_ids: Vec<String> = captured
+        .discussions()
+        .iter()
+        .flat_map(|discussion| {
+            discussion
+                .notes()
+                .iter()
+                .map(|note| note.id.as_str().to_owned())
+        })
+        .collect();
+    assert!(!note_ids.contains(&deleted.to_string()));
+    let edited_note = captured
+        .discussions()
+        .iter()
+        .flat_map(|discussion| discussion.notes())
+        .find(|note| note.id.as_str() == edited.to_string())
+        .unwrap();
+    assert_eq!(edited_note.body, "Edited wording.");
+    match (&bot, bot_note) {
+        (Some(bot), Some(note)) => {
+            let observed = captured
+                .discussions()
+                .iter()
+                .flat_map(|discussion| discussion.notes())
+                .find(|candidate| candidate.id.as_str() == note.to_string())
+                .unwrap();
+            assert_eq!(observed.author.as_str(), bot.id.to_string());
+            let user = fixture.admin.get(&format!("users/{}", bot.id));
+            println!(
+                "Bot note author: bot={} username={}",
+                user["bot"], user["username"]
+            );
+        }
+        _ => println!("Bot note skipped: project access tokens are unavailable"),
+    }
+
+    // A note edit and a resolution change after capture are freshness differences.
+    commenter.api.call(
+        Method::PUT,
+        &format!("{notes}/{edited}"),
+        json!({"body":"Edited again after capture."}),
+    );
+    fixture.author.api.call(
+        Method::PUT,
+        &format!("{threads}/{thread_id}"),
+        json!({"resolved":false}),
+    );
+    let fresh = client.capture_conversation(client.subject()).unwrap();
+    assert_eq!(
+        fresh.changes_since(&captured),
+        [
+            ConversationChange::ResolutionChanged {
+                discussion: id(&thread_id.clone().into()),
+                retained: Resolution::Resolved,
+                current: Resolution::Unresolved,
+            },
+            ConversationChange::NoteBodyChanged(id(&edited.into())),
+        ]
+    );
+    fixture.cleanup();
+}

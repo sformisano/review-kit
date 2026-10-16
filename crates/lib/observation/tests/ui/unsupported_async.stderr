@@ -1,0 +1,5 @@
+error: managed functions must be synchronous, non-const, safe Rust functions without variadic arguments
+ --> tests/ui/unsupported_async.rs:4:9
+  |
+4 |     pub async fn run() {}
+  |         ^^^^^

@@ -1,0 +1,58 @@
+[package]
+name = "review-kit-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "rkc"
+path = "src/main.rs"
+
+[features]
+# Test builds only: `RKC_FAULT=<point>[:<n>]` aborts the process at a named crash point.
+fault-injection = []
+
+[[test]]
+name = "faults"
+path = "tests/faults.rs"
+required-features = ["fault-injection"]
+
+[dependencies]
+review-kit-observation = { path = "../../lib/observation" }
+review-kit-domain = { path = "../../lib/domain" }
+review-kit-application = { path = "../../lib/application" }
+review-kit-gitlab-adapter = { path = "../../lib/infrastructure/gitlab-adapter" }
+review-kit-json-adapter = { path = "../../lib/infrastructure/json-adapter" }
+review-kit-filesystem-adapter = { path = "../../lib/infrastructure/filesystem-adapter" }
+review-kit-json2md-adapter = { path = "../../lib/infrastructure/json2md-adapter" }
+clap = { version = "4.6", features = ["derive", "env"] }
+displaydoc.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+url = "2.5"
+toml = { version = "1.1", default-features = false, features = ["parse", "serde", "std"] }
+uuid.workspace = true
+time = { version = "0.3", features = ["formatting"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+httpmock.workspace = true
+percent-encoding = "2.3"
+assert_cmd.workspace = true
+tempfile.workspace = true
+testcontainers.workspace = true
+reqwest.workspace = true
+anyhow = "1"
+base64 = "0.23"
+sha2 = "0.10"
+process-wrap = { version = "10.0.1", default-features = false, features = ["tokio1", "process-group", "kill-on-drop"] }
+tokio = { version = "1", features = ["rt", "time", "process"] }
+
+[lints]
+workspace = true

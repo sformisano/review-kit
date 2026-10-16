@@ -1,0 +1,5 @@
+error[E0425]: cannot find function `run_raw` in module `managed`
+ --> tests/ui/no_raw_sibling.rs:8:14
+  |
+8 |     managed::run_raw();
+  |              ^^^^^^^ not found in `managed`

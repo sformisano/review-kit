@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "kind": "context",
+  "snapshot": {
+    "subject": {
+      "provider": "gitlab",
+      "host": "https://gitlab.example.test",
+      "repository": "team/project",
+      "request": 1
+    },
+    "reviewer": "9",
+    "revision": {
+      "head": "1111111111111111111111111111111111111111",
+      "comparison": [
+        "2222222222222222222222222222222222222222",
+        "3333333333333333333333333333333333333333"
+      ]
+    },
+    "summaries": [],
+    "findings": [],
+    "replies": [],
+    "permissions": [
+      "create_summary",
+      "update_summary",
+      "finding",
+      "reply",
+      "resolve",
+      "reopen"
+    ]
+  },
+  "changes": {
+    "subject": {
+      "provider": "gitlab",
+      "host": "https://gitlab.example.test",
+      "repository": "team/project",
+      "request": 1
+    },
+    "revision": {
+      "head": "1111111111111111111111111111111111111111",
+      "comparison": [
+        "2222222222222222222222222222222222222222",
+        "3333333333333333333333333333333333333333"
+      ]
+    },
+    "files": [],
+    "unified_diff": ""
+  }
+}

@@ -1,0 +1,3 @@
+{% if new_status == previous_status %}**Updated.**{% elif new_status == "Fixed" %}**Fixed.**{% elif new_status == "Withdrawn" %}**Withdrawn.**{% elif new_status == "Open" and previous_status == "Uncertain" %}**Confirmed.**{% elif new_status == "Open" %}**Reopened.**{% else %}**{{ new_status }}.**{% endif %}{% if "\n" in explanation %}
+
+{% else %} {% endif %}{{ explanation }}

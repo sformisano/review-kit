@@ -1,0 +1,5 @@
+error: observed operations do not support cfg_attr; declare supported attributes directly
+ --> tests/ui/unsupported_cfg_attr.rs:3:5
+  |
+3 |     #[cfg_attr(all(), track_caller)]
+  |     ^

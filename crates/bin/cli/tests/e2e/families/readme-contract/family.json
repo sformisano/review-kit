@@ -1,0 +1,25 @@
+{
+  "schema_version": "fixture-family/v1",
+  "project": "retry-schedule",
+  "base_message": "Initialize the retry schedule",
+  "merge_requests": [
+    {
+      "label": "spelling",
+      "branch": "readme-spelling",
+      "overlay": "spelling",
+      "title": "Fix a spelling mistake in the README",
+      "description": "Corrects the spelling of one word in the README example explanation."
+    },
+    {
+      "label": "constant-schedule",
+      "branch": "document-constant-schedules",
+      "overlay": "constant-schedule-docs",
+      "title": "Document constant retry schedules",
+      "description": "Explains how to configure a retry schedule whose delay never grows and adds a README example for it.\n\nThe README describes the library contract. Run `cargo test` offline."
+    }
+  ],
+  "overlays": {
+    "spelling": {"message": "Fix the spelling of receives in the README"},
+    "constant-schedule-docs": {"message": "Document constant retry schedules"}
+  }
+}

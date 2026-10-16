@@ -1,0 +1,5 @@
+error: observed_port moves facade declarations into a child module; use imported or crate:: paths instead of super::
+ --> tests/ui/unsupported_port_parent_reader.rs:4:14
+  |
+4 |     reader = super::ManagedReader
+  |              ^^^^^

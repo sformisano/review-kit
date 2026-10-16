@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Review Kit review run v1",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "kind": {
+      "const": "review_run"
+    },
+    "run_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "subject": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "repository": {
+          "type": "string"
+        },
+        "request": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "provider",
+        "host",
+        "repository",
+        "request"
+      ],
+      "additionalProperties": false
+    },
+    "reviewer": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "revision": {
+      "type": "object",
+      "properties": {
+        "head": {
+          "type": "string"
+        },
+        "comparison": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "head",
+        "comparison"
+      ],
+      "additionalProperties": false
+    },
+    "context": {
+      "const": "review-context.json"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "enum": [
+        "open",
+        "completed",
+        "stopped"
+      ]
+    },
+    "completion": {
+      "enum": [
+        null,
+        "published",
+        "no_changes",
+        "local_only",
+        "abandoned"
+      ]
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "snapshot_files": {
+      "type": "object",
+      "properties": {
+        "review-context.json": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "reviewed-source.json": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "merge-request.diff": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "review-conversation.json": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "review-context.json",
+        "reviewed-source.json",
+        "merge-request.diff",
+        "review-conversation.json"
+      ],
+      "additionalProperties": false
+    },
+    "publication_attempted": {
+      "type": "boolean",
+      "description": "Set durably before the first publication binding or dispatch; never reset. Used to require authoritative journal reconciliation for later local mutations."
+    },
+    "review_assessment": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "version",
+    "kind",
+    "run_id",
+    "subject",
+    "reviewer",
+    "revision",
+    "context",
+    "created_at",
+    "status",
+    "completion",
+    "reason",
+    "snapshot_files",
+    "review_assessment",
+    "publication_attempted"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "open"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "completion": {
+            "type": "null"
+          },
+          "reason": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "completed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "completion": {
+            "enum": [
+              "published",
+              "no_changes",
+              "local_only",
+              "abandoned"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "stopped"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "completion": {
+            "type": "null"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "completion": {
+            "const": "abandoned"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        }
+      }
+    }
+  ]
+}

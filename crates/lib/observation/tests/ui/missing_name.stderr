@@ -1,0 +1,5 @@
+error: unexpected end of input, operation requires name = "..."
+ --> tests/ui/missing_name.rs:3:159
+  |
+3 | ...tion::Completion::success(review_kit_observation::Fields::new()))]
+  |                                                                    ^

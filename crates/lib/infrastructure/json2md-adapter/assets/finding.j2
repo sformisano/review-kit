@@ -1,0 +1,6 @@
+**F{{ id }}: {{ title_markdown | trim }}**
+
+{{ body }}
+{% if suggestion is not none %}
+{{ suggestion.markdown }}{% endif %}
+*{{ severity }} · {{ policy.name_markdown | trim }}*

@@ -1,0 +1,10 @@
+profile:
+  id: payout-ledger-review
+  display_name: Payout Ledger review
+catalogs:
+  ai-skills:
+    source: http://127.0.0.1:18731/ai-skills.git
+entries:
+- catalog_id: ai-skills
+  kind: stack
+  slug: codebase-review-workflows

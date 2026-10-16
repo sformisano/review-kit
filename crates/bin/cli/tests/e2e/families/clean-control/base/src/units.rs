@@ -1,0 +1,42 @@
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Units(u32);
+
+impl Units {
+    pub const fn new(value: u32) -> Self {
+        Self(value)
+    }
+
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+
+    pub fn checked_add(self, other: Self) -> Option<Self> {
+        self.0.checked_add(other.0).map(Self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn addition_keeps_exact_sums() {
+        assert_eq!(
+            Units::new(2).checked_add(Units::new(3)),
+            Some(Units::new(5))
+        );
+        assert_eq!(
+            Units::new(0).checked_add(Units::new(0)),
+            Some(Units::new(0))
+        );
+        assert_eq!(
+            Units::new(u32::MAX - 1).checked_add(Units::new(1)),
+            Some(Units::new(u32::MAX))
+        );
+    }
+
+    #[test]
+    fn addition_reports_overflow() {
+        assert_eq!(Units::new(u32::MAX).checked_add(Units::new(1)), None);
+    }
+}

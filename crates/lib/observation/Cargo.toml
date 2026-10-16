@@ -1,0 +1,23 @@
+[package]
+name = "review-kit-observation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+review-kit-observation-macros = { path = "../observation-macros" }
+redactable.workspace = true
+serde.workspace = true
+slog.workspace = true
+slog-json.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+trybuild = "1"
+
+[lints]
+workspace = true

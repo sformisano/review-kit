@@ -1,0 +1,73 @@
+{
+  "version": 3,
+  "kind": "progress",
+  "subject": {
+    "provider": "gitlab",
+    "host": "https://gitlab.example.test",
+    "repository": "team/project",
+    "request": 1
+  },
+  "reviewer": "9",
+  "authorization": {
+    "round": 1,
+    "effects": [
+      "create_summary",
+      "update_summary",
+      "finding"
+    ]
+  },
+  "unresolved": {
+    "subject": {
+      "provider": "gitlab",
+      "host": "https://gitlab.example.test",
+      "repository": "team/project",
+      "request": 1
+    },
+    "reviewer": "9",
+    "write": {
+      "kind": "finding",
+      "round": 1,
+      "revision": {
+        "head": "1111111111111111111111111111111111111111",
+        "comparison": [
+          "2222222222222222222222222222222222222222",
+          "3333333333333333333333333333333333333333"
+        ]
+      },
+      "finding": {
+        "id": 1,
+        "policy_id": "rust-invariant-preservation",
+        "title": "Validate quantities during JSON deserialization",
+        "body": "JSON input can construct a zero quantity even though Quantity::new rejects zero. Route deserialization through the constructor to preserve the documented positive-value guarantee.",
+        "severity": "p2",
+        "disposition": "blocking",
+        "status": "open",
+        "evidence": "Quantity::new rejects zero, but derived Deserialize writes the private value field without calling that constructor. The new JSON input therefore admits {\"value\":0}.",
+        "validated": true,
+        "location": {
+          "path": "src/quantity.rs",
+          "line": 3
+        },
+        "suggestion": null
+      },
+      "body": "JSON input can construct a zero quantity even though Quantity::new rejects zero. Route deserialization through the constructor to preserve the documented positive-value guarantee."
+    },
+    "phase": "dispatch_possible",
+    "baseline": null,
+    "renderer": null
+  },
+  "retried_creations": [],
+  "coverage_binding": {
+    "run_id": "00000000-0000-4000-8000-000000000001",
+    "round": 1,
+    "review_assessment": "sha256:e77fd20af5030fcef6b13919dc44f136cbf66dc8f06cee944dfa1411bf19e336",
+    "snapshot_files": {
+      "review-context.json": "sha256:b13076cb11cd8fba03afb344b9b277d8c24ee7dea3c47d7c32cdf4a89a1c4727",
+      "reviewed-source.json": "sha256:43303df3ca13c1db2c45a53308227111bf4ed101930e973b506413ecb1d4973c",
+      "merge-request.diff": "sha256:41071d8693ac6272996b3f782c34f68f20096f9b85c2fe083261a54ec4d2e34d",
+      "review-conversation.json": "sha256:6ec70d00c706767707dc5b3d5f78cbc8eb8d5f88d031fb97b9b4f46593d07d87"
+    }
+  },
+  "settled_runs": [],
+  "dispatch_may_have_started": true
+}

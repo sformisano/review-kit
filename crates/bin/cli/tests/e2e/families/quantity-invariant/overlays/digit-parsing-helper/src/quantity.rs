@@ -1,0 +1,118 @@
+use std::fmt;
+use std::str::FromStr;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Quantity {
+    value: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum QuantityError {
+    Zero,
+    Invalid,
+}
+
+impl fmt::Display for QuantityError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Zero => f.write_str("quantity must be greater than zero"),
+            Self::Invalid => f.write_str("quantity text must contain decimal digits only"),
+        }
+    }
+}
+
+impl std::error::Error for QuantityError {}
+
+impl Quantity {
+    pub fn new(value: u32) -> Result<Self, QuantityError> {
+        if value == 0 {
+            Err(QuantityError::Zero)
+        } else {
+            Ok(Self { value })
+        }
+    }
+
+    pub fn get(self) -> u32 {
+        self.value
+    }
+
+    pub fn checked_add(self, other: Self) -> Option<Self> {
+        self.value
+            .checked_add(other.value)
+            .map(|value| Self { value })
+    }
+
+    pub fn checked_sub(self, other: Self) -> Option<Self> {
+        self.value
+            .checked_sub(other.value)
+            .and_then(|value| Self::new(value).ok())
+    }
+}
+
+impl fmt::Display for Quantity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
+/// Parses ASCII decimal digits without a sign, spaces or separators.
+fn parse_digits(text: &str) -> Result<u32, QuantityError> {
+    if text.is_empty() || !text.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(QuantityError::Invalid);
+    }
+    text.parse::<u32>().map_err(|_| QuantityError::Invalid)
+}
+
+impl FromStr for Quantity {
+    type Err = QuantityError;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        parse_digits(text).map(|value| Self { value })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn constructor_rejects_zero() {
+        assert_eq!(Quantity::new(0), Err(QuantityError::Zero));
+        assert_eq!(Quantity::new(4).unwrap().get(), 4);
+    }
+
+    #[test]
+    fn addition_detects_overflow() {
+        let large = Quantity::new(u32::MAX).unwrap();
+        assert_eq!(large.checked_add(Quantity::new(1).unwrap()), None);
+        let sum = Quantity::new(2)
+            .unwrap()
+            .checked_add(Quantity::new(3).unwrap());
+        assert_eq!(sum.map(Quantity::get), Some(5));
+    }
+
+    #[test]
+    fn subtraction_keeps_the_difference() {
+        let five = Quantity::new(5).unwrap();
+        let three = Quantity::new(3).unwrap();
+        assert_eq!(five.checked_sub(three).map(Quantity::get), Some(2));
+        assert_eq!(three.checked_sub(five), None);
+        assert_eq!(three.checked_sub(three), None);
+    }
+
+    #[test]
+    fn digits_parse_without_signs_or_separators() {
+        assert_eq!(parse_digits("12"), Ok(12));
+        assert_eq!(parse_digits("007"), Ok(7));
+        for text in ["", "+3", "-3", " 3", "1x", "1_000", "99999999999"] {
+            assert_eq!(parse_digits(text), Err(QuantityError::Invalid), "{text:?}");
+        }
+    }
+
+    #[test]
+    fn text_parses_into_a_quantity() {
+        assert_eq!("12".parse::<Quantity>().map(Quantity::get), Ok(12));
+        assert_eq!("x".parse::<Quantity>(), Err(QuantityError::Invalid));
+    }
+}

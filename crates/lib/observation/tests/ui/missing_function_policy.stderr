@@ -1,0 +1,5 @@
+error: managed functions require #[operation(...)] or #[helper]
+ --> tests/ui/missing_function_policy.rs:3:12
+  |
+3 |     pub fn unchecked() {}
+  |            ^^^^^^^^^

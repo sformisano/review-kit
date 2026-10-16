@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Review Kit review workspace v1",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "kind": {
+      "const": "review_workspace"
+    },
+    "repository": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "repository": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "host",
+        "repository"
+      ],
+      "additionalProperties": false
+    },
+    "selected_run_id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "version",
+    "kind",
+    "repository",
+    "selected_run_id"
+  ],
+  "additionalProperties": false
+}
