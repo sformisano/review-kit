@@ -70,16 +70,7 @@ impl Ledger {
     }
 
     pub fn refund(&mut self, account: &str, amount: Cents) -> Result<(), LedgerError> {
-        if amount.0 <= 0 {
-            return Err(LedgerError::InvalidAmount);
-        }
-        let updated = self
-            .balance(account)
-            .checked_add(amount)
-            .ok_or(LedgerError::Overflow)?;
-        self.balances.insert(account.to_owned(), updated);
-        self.audit.record(account, amount.0);
-        Ok(())
+        self.deposit(account, amount)
     }
 }
 
