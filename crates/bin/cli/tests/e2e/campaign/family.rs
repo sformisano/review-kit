@@ -416,9 +416,8 @@ mod tests {
                 "{name}"
             );
             assert!(
-                manifest.contains(
-                    "- catalog_id: ai-skills\n  kind: stack\n  slug: codebase-review-workflows\n"
-                ),
+                manifest
+                    .contains("- catalog_id: ai-skills\n  kind: stack\n  slug: codebase-review\n"),
                 "{name}"
             );
         }

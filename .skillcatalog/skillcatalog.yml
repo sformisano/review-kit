@@ -76,10 +76,10 @@ entries:
   slug: smoke-test-execution
 - catalog_id: ai-skills
   kind: skill
-  slug: systematic-debugging
+  slug: skill-change-validation
 - catalog_id: ai-skills
   kind: skill
-  slug: ci-remediation-loop
+  slug: systematic-debugging
 - catalog_id: ai-skills
   kind: skill
   slug: controlled-language
