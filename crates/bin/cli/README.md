@@ -473,10 +473,10 @@ communicated.
 ### Public summary text
 
 The default summary shows the decision, the overall `limitation` and the findings first.
-Its collapsed `Review details` section shows `scope`, `depth`, and each policy's `reason` and any blocked or unresolved `limitation`,
-grouped by applicability with each result; the
+Its last collapsed section, `Review details`, shows each round's `scope` and `depth`, and each policy's `reason` and any blocked or unresolved `limitation`,
+grouped by applicability with each result. The
 [renderer contract](../../lib/infrastructure/json2md-adapter/README.md#default-presentation-and-safety) defines the layout,
-including the separate collapsed section of each earlier round.
+including each earlier round's collapsed findings section and the order of rounds in `Review details`.
 These fields are plain text: backticks, links and other Markdown show literally.
 The renderer prints each one in full, so keep each one short:
 

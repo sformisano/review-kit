@@ -5,7 +5,10 @@ use std::error::Error;
 use review_kit_application::{ports::ReviewRenderer, publication::*, summary::*};
 use review_kit_domain::*;
 use review_kit_json2md_adapter::Json2MdRenderer;
-use support::{sections::layout, *};
+use support::{
+    sections::{groups, layout},
+    *,
+};
 
 const STATUS_LINES: [&str; 4] = [
     "This round has not finished posting.",
@@ -172,8 +175,8 @@ fn abandonment_reason_appears_in_review_details() -> TestResult {
     let body = render(&view)?;
     let sections = layout(&body)?;
     assert!(
-        sections
-            .section("Review details")?
+        groups(sections.section("Review details")?)
+            .group("Round 2")?
             .contains("\n- Stopped: Superseded by \\*manual\\* review\n")
     );
     assert_eq!(body.matches("- Stopped: ").count(), 1, "{body}");

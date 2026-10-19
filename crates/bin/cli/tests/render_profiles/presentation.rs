@@ -14,9 +14,6 @@ const FINDINGS_HEADER: &str = "| ID | Finding | Severity | Status | This round |
 const HISTORY_HEADER: &str = "| ID | Finding | Severity | Status | That round |";
 const POLICIES_HEADER: &str = "| Policy | Result | Open findings | Reason |";
 const REASON: &str = "The changed Rust source is covered by this policy.";
-/// The embedded summary template that rendered rounds before policies were
-/// grouped by applicability.
-const PREVIOUS_DEFAULT_SUMMARY: &str = include_str!("previous-default-summary.j2");
 
 #[test]
 fn embedded_findings_use_declared_names_and_a_severity_footer_without_evidence() {
@@ -158,16 +155,17 @@ fn rounds_published_in_the_previous_default_layout_stay_readable_with_the_same_w
     for previous in [false, true] {
         let fixture = Fixture::new();
         if previous {
-            let profile = fixture.export("previous");
-            profile.template("summary", PREVIOUS_DEFAULT_SUMMARY);
-            fixture.select(&profile);
+            fixture.select(&fixture.export_previous_default("previous"));
         }
         fixture.publish(&fixture.initial("initial", None));
         if previous {
+            let summary = fixture.summary();
+            let body = public_summary(&summary);
             assert!(
-                public_summary(&fixture.summary())
-                    .contains("| Policy | Applies | Result | Open findings |")
+                body.contains("<summary>Review details</summary>\n\n- Reviewed commit "),
+                "{body}"
             );
+            assert!(!body.contains("#### Round"), "{body}");
             let mut config = read_json(&fixture.config);
             config.as_object_mut().unwrap().remove("render_profile");
             write_json(&fixture.config, &config);
@@ -194,11 +192,12 @@ fn rounds_published_in_the_previous_default_layout_stay_readable_with_the_same_w
     assert_eq!(body.matches(POLICIES_HEADER).count(), 1, "{body}");
     assert!(finding_row(body).contains("| Fixed |"), "{body}");
     let first = history_section(body, 1);
-    assert!(
-        first.contains(&format!("\n| rust-error-contracts | Fail | {REASON} |\n")),
-        "{first}"
-    );
+    assert!(!first.contains("| Policy |"), "{first}");
     assert!(finding_row(first).ends_with("| Open | Posted |"), "{first}");
+    assert!(
+        details_group(body, 1).contains(&format!("\n| rust-error-contracts | Fail | {REASON} |\n")),
+        "{body}"
+    );
 }
 
 #[test]
@@ -284,16 +283,13 @@ fn renamed_inventory_policy_creates_a_successor_round_and_retains_historical_nam
     assert_eq!(published["run"]["outcome"]["result"]["round"], 2);
     let summary = fixture.summary();
     let body = public_summary(&summary);
-    let current = body
-        .split_once("<summary>Review details</summary>")
-        .unwrap()
-        .1;
+    let current = details_group(body, 2);
     assert!(
         current.contains(&format!("\n| Actionable errors | Fail | F1 | {REASON} |\n")),
         "{body}"
     );
     assert!(!current.contains("| Error handling |"), "{body}");
-    let historical = history_section(body, 1);
+    let historical = details_group(body, 1);
     assert!(
         historical.contains(&format!("\n| Error handling | Fail | {REASON} |\n")),
         "{historical}"
@@ -479,6 +475,25 @@ fn history_section(body: &str, number: u64) -> &str {
         .split_once("</details>")
         .unwrap()
         .0
+}
+
+/// The supporting details that the Review details section lists under the
+/// heading of round `number`.
+fn details_group(body: &str, number: u64) -> &str {
+    let details = body
+        .split_once("<summary>Review details</summary>")
+        .unwrap()
+        .1;
+    let group = details
+        .split_once(&format!("\n#### Round {number}\n"))
+        .unwrap()
+        .1;
+    let end = ["\n#### ", "</details>"]
+        .into_iter()
+        .filter_map(|end| group.find(end))
+        .min()
+        .unwrap_or(group.len());
+    &group[..end]
 }
 
 /// The summaries of the top-level collapsed sections in order; a section

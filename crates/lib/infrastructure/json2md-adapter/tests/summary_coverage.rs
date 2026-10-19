@@ -6,14 +6,14 @@ use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 use review_kit_application::{
     ports::ReviewRenderer,
     publication::{Abandonment, Round, RoundStatus},
-    summary::{FindingCounts, HistoricalFinding, PublishedAction, SummaryView},
+    summary::{FindingCounts, PublishedAction, SummaryView},
 };
 use review_kit_domain::*;
 use review_kit_json2md_adapter::Json2MdRenderer;
 use support::{
     TestResult,
     coverage::{self, Declared, Outcome},
-    sections::layout,
+    sections::{blocks, groups, layout},
 };
 
 fn render(view: &SummaryView) -> Result<String, Box<dyn Error>> {
@@ -334,19 +334,7 @@ fn history_round(
         policies,
         findings,
     )?;
-    round.communicated_findings = Some(
-        rows.into_iter()
-            .map(|(finding, actions)| -> Result<_, Box<dyn Error>> {
-                let root = coverage::root(&finding, 1)?;
-                Ok(HistoricalFinding {
-                    finding,
-                    root_note: root.root_note,
-                    thread: root.id,
-                    actions,
-                })
-            })
-            .collect::<Result<_, _>>()?,
-    );
+    round.communicated_findings = Some(coverage::communicated(rows)?);
     Ok(round)
 }
 
@@ -481,7 +469,7 @@ fn three_rounds() -> Result<SummaryView, Box<dyn Error>> {
 }
 
 #[test]
-fn history_keeps_each_collapsed_round_with_its_own_coverage_and_finding_states() -> TestResult {
+fn each_earlier_round_keeps_its_finding_states_and_its_own_coverage_group() -> TestResult {
     let body = render(&three_rounds()?)?;
     let sections = layout(&body)?;
     assert_eq!(
@@ -506,50 +494,61 @@ fn history_keeps_each_collapsed_round_with_its_own_coverage_and_finding_states()
     assert!(!visible.contains("| Policy |"), "{visible}");
 
     let details = sections.section("Review details")?;
-    assert!(details.contains(&format!("\n- Scope: {}\n", coverage::SCOPE)));
-    assert!(details.contains(&format!("\n- Depth: {}\n", coverage::DEPTH)));
-    assert!(
-        details.contains("\n**Applicable policies (1)**\n"),
-        "{details}"
-    );
-    assert!(details.contains("\n**Excluded policies (2)**\n\n| Policy | Reason |\n"));
+    assert!(!details.contains("| ID |"), "{details}");
+    let rounds = groups(details);
+    assert!(rounds.lead.trim().is_empty(), "{body}");
     assert_eq!(
-        row(details, "| Rust Error Contracts | ")?,
+        rounds.headings(),
+        ["Round 3", "Round 1", "Round 2"],
+        "{body}"
+    );
+    let current = rounds.group("Round 3")?;
+    assert!(current.contains(&format!("\n- Scope: {}\n", coverage::SCOPE)));
+    assert!(current.contains(&format!("\n- Depth: {}\n", coverage::DEPTH)));
+    assert!(
+        current.contains("\n**Applicable policies (1)**\n"),
+        "{current}"
+    );
+    assert!(current.contains("\n**Excluded policies (2)**\n\n| Policy | Reason |\n"));
+    assert_eq!(
+        row(current, "| Rust Error Contracts | ")?,
         "| Rust Error Contracts | Fail | F1 | The send path is fallible. |"
     );
     assert_eq!(
-        row(details, "| State Coherence Policy | ")?,
+        row(current, "| State Coherence Policy | ")?,
         "| State Coherence Policy | The change no longer shares job state. |"
     );
-    assert!(!details.contains("**Policies not declared"));
-    assert!(!details.contains("| ID |"), "{details}");
+    assert!(!current.contains("**Policies not declared"));
+
+    for number in ["Round 1", "Round 2"] {
+        let group = rounds.group(number)?;
+        assert!(group.contains("\n- Reviewed commit `4f2c1e9a7b3d` against `0a1b2c3d4e5f`\n"));
+        assert!(group.contains(
+            "\n- Workflow: codebase-policies-review, policy set rust-codebase-policies\n"
+        ));
+        assert!(group.contains("\n**Applicable policies (2)**\n\n| Policy | Result | Reason |\n"));
+        assert!(group.contains("\n**Excluded policies (1)**\n"));
+        assert_eq!(
+            row(group, "| State Coherence Policy | ")?,
+            "| State Coherence Policy | Fail | A job can exist in two places during a retry. |"
+        );
+        assert_eq!(
+            row(group, "| Technical Claims Policy | ")?,
+            "| Technical Claims Policy | The README is unchanged. |"
+        );
+    }
 
     let first = sections.section("Round 1 · Changes required")?;
     let second = sections.section("Round 2 · Changes required")?;
     for section in [first, second] {
-        assert!(section.contains("\n- Reviewed commit `4f2c1e9a7b3d` against `0a1b2c3d4e5f`\n"));
-        assert!(section.contains(
-            "\n- Workflow: codebase-policies-review, policy set rust-codebase-policies\n"
-        ));
-        assert!(
-            section.contains("\n**Applicable policies (2)**\n\n| Policy | Result | Reason |\n")
-        );
-        assert!(section.contains("\n**Excluded policies (1)**\n"));
-        assert_eq!(
-            row(section, "| State Coherence Policy | ")?,
-            "| State Coherence Policy | Fail | A job can exist in two places during a retry. |"
-        );
-        assert_eq!(
-            row(section, "| Technical Claims Policy | ")?,
-            "| Technical Claims Policy | The README is unchanged. |"
-        );
         assert_eq!(
             section
                 .lines()
-                .filter(|line| line.starts_with("| F"))
-                .count(),
-            3,
-            "{section}"
+                .filter(|line| !line.is_empty())
+                .map(|line| line.starts_with("| F"))
+                .collect::<Vec<_>>(),
+            [false, false, true, true, true],
+            "only the header, the delimiter and three rows: {section}"
         );
     }
     assert!(row(second, "| F1 | ")?.ends_with(" | Fixed | Open → Fixed, resolved |"));
@@ -638,10 +637,7 @@ fn second_completed_round_keeps_round_one_beside_review_details() -> TestResult 
     assert!(row(sections.visible, "| F1 | ")?.ends_with(" | Fixed | Open → Fixed, resolved |"));
 
     let first = sections.section("Round 1 · Changes required")?;
-    assert_eq!(
-        row(first, "| Rust Error Contracts | ")?,
-        "| Rust Error Contracts | Fail | The send path is fallible. |"
-    );
+    assert!(!first.contains("| Rust Error Contracts | "), "{first}");
     let line = row(first, "| F1 | ")?;
     assert!(
         line.ends_with(" | P2 · Blocking | Open | Posted |"),
@@ -650,14 +646,24 @@ fn second_completed_round_keeps_round_one_beside_review_details() -> TestResult 
     assert!(line.contains("#note_27885701>)"), "{line}");
 
     let details = sections.section("Review details")?;
-    assert!(details.starts_with("\n\n- Reviewed commit `4f2c1e9a7b3d` against `0a1b2c3d4e5f`\n"));
-    assert!(details.contains(&format!("\n- Scope: {}\n", coverage::SCOPE)));
-    assert!(details.contains(&format!("\n- Depth: {}\n", coverage::DEPTH)));
+    assert!(!details.contains("| ID |"), "{details}");
+    let rounds = groups(details);
+    assert_eq!(rounds.headings(), ["Round 2", "Round 1"], "{body}");
+    let current = rounds.group("Round 2")?;
     assert_eq!(
-        row(details, "| Rust Error Contracts | ")?,
+        blocks(current).items[0],
+        "Reviewed commit 4f2c1e9a7b3d against 0a1b2c3d4e5f"
+    );
+    assert!(current.contains(&format!("\n- Scope: {}\n", coverage::SCOPE)));
+    assert!(current.contains(&format!("\n- Depth: {}\n", coverage::DEPTH)));
+    assert_eq!(
+        row(current, "| Rust Error Contracts | ")?,
         "| Rust Error Contracts | Pass | — | The send path is fallible. |"
     );
-    assert!(!details.contains("| ID |"), "{details}");
+    assert_eq!(
+        row(rounds.group("Round 1")?, "| Rust Error Contracts | ")?,
+        "| Rust Error Contracts | Fail | The send path is fallible. |"
+    );
     Ok(())
 }
 
@@ -741,25 +747,40 @@ fn every_round_stays_a_top_level_section_whatever_its_publication_status() -> Te
             assert_eq!(body.matches(line).count(), 1, "{body}");
             assert!(sections.visible.contains(&format!("\n{line}\n")), "{body}");
         }
+        let rounds = groups(sections.section("Review details")?);
+        assert_eq!(
+            rounds.headings(),
+            ["Round 4", "Round 1", "Round 2", "Round 3"],
+            "{status:?}: {body}"
+        );
         assert!(
-            sections
-                .section("Review details")?
-                .starts_with(&format!("\n\n- {kind} commit `4f2c1e9a7b3d`")),
+            blocks(rounds.group("Round 4")?).items[0]
+                .starts_with(&format!("{kind} commit 4f2c1e9a7b3d")),
             "{status:?}: {body}"
         );
 
         let first = sections.section("Round 1 · Changes required · abandoned")?;
+        assert_eq!(first.trim(), "No findings were posted.", "{body}");
+        let first = rounds.group("Round 1")?;
         assert!(first.contains("\n- Attempted commit `4f2c1e9a7b3d`"));
         assert!(first.contains(&format!("\n- Stopped: {STOPPED}\n")));
-        assert!(first.contains("\nNo findings were posted.\n"));
         assert_eq!(body.matches(STOPPED).count(), 1, "{body}");
         let second = sections.section("Round 2 · Changes required · superseded")?;
-        assert!(second.contains("\n- Attempted commit `4f2c1e9a7b3d`"));
         assert!(row(second, "| F1 | ")?.ends_with(" | Open | Posted |"));
+        assert!(
+            rounds
+                .group("Round 2")?
+                .contains("\n- Attempted commit `4f2c1e9a7b3d`")
+        );
         let third = sections.section("Round 3 · Blocked")?;
+        assert_eq!(
+            third.trim(),
+            "Findings for this round were not recorded.",
+            "{body}"
+        );
+        let third = rounds.group("Round 3")?;
         assert!(third.contains("\n- Reviewed commit `4f2c1e9a7b3d`"));
         assert!(third.contains("\n- Limitation: Proof is unavailable.\n"));
-        assert!(third.contains("\nFindings for this round were not recorded.\n"));
     }
     Ok(())
 }

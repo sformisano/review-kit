@@ -300,7 +300,9 @@ The outcome is `Fixed.`, `Withdrawn.` or `Reopened.`; an uncertain finding that 
 A same-state reclassification keeps the status and opens with `Updated.` instead.
 Other changes use the new status.
 
-Embedded summaries show the review decision as a heading, then a recap line with the round number and each nonzero finding state.
+Embedded summaries give every round a section with the same parts: its number, its decision and, when it has findings, its findings table.
+The current round's section is visible.
+It shows the review decision as a heading, then a recap line with the round number and each nonzero finding state.
 When no finding has a verified root and none is waiting to post, the recap ends in `no findings`.
 The overall limitation stays visible.
 Pending, partial, superseded and abandoned publication add a status line.
@@ -308,12 +310,23 @@ The latest findings table shows each finding's severity and disposition, such as
 A resolution the tool observed instead of performing reads `resolved (observed)` or `reopened (observed)`.
 The `unpublished` IDs follow under `Not posted yet:`.
 
-Collapsed sections follow at the top level: one for each earlier round, oldest first, then `Review details` for the current round.
-No section contains another, so a reader opens any earlier round without opening `Review details`.
-An earlier round's label names its number and decision, then its publication status when that is pending, partial, superseded or abandoned, such as `Round 1 · Changes required · abandoned`.
+Each earlier round follows in its own collapsed section, oldest first.
+Its label names its number and decision, then its publication status when that is pending, partial, superseded or abandoned, such as `Round 1 · Changes required · abandoned`.
+The section holds only that round's immutable findings table, whose last column shows its actions in that round.
+An earlier round that posted no findings says `No findings were posted.`
+One without a retained table says `Findings for this round were not recorded.`
+Historical input carries no finding counts, so an earlier round has no recap line.
 
-`Review details` holds the current round's commit, scope, depth, workflow, publication limitation and abandonment reason.
-It then lists each policy once, in one table per applicability group with its count:
+One collapsed `Review details` section closes the summary.
+It holds the supporting details of every round, each under a `Round <number>` heading.
+The current round comes first, then the earlier rounds in the order of their sections.
+Two rounds give `Round 2`, `Round 1`; three give `Round 3`, `Round 1`, `Round 2`.
+No section nests another, and `Review details` repeats no findings table.
+Blank lines separate each heading, list and table from its neighbors and from the section tags, so GitLab renders the Markdown inside a collapsed section.
+
+Under its heading, each round lists its commit, scope, depth, workflow, publication limitation and abandonment reason.
+An earlier round also lists its limitation there; the current round's limitation stays visible beside its decision.
+Each round then lists each policy once, in one table per applicability group with its count:
 
 | Group | Columns |
 | --- | --- |
@@ -322,12 +335,14 @@ It then lists each policy once, in one table per applicability group with its co
 | Excluded policies | Policy and reason; open findings only while an excluded policy still has one |
 | Policies not declared in this round | Policy and its earlier applicable rounds; a missing display name shows the policy ID |
 
+These are the current round's columns.
+An earlier round has the first three groups, with that round's names, results and reasons and without open findings.
 Empty groups are omitted. A round without policies says `No policies were declared.`
-Results read `Pass`, `Fail` or `Blocked`, or `—` when the latest round did not assess the policy.
+Results read `Pass`, `Fail` or `Blocked`, or `—` when that round did not assess the policy.
 A blocked result carries its limitation in the same cell, as `Blocked: <limitation>`.
-It reads `Blocked` alone when the limitation equals the policy's reason, and `Blocked: see the limitation above` when it equals the round's overall limitation, so each text appears once.
+It reads `Blocked` alone when the limitation equals the policy's reason, and `Blocked: see the limitation above` when it equals that round's overall limitation, so each text appears once.
+That overall limitation appears above the reference: beside the decision for the current round, and under its own heading for an earlier round.
 The template compares exact text; it never shortens or rewrites authored text.
-An earlier round's section holds its commit, scope, depth, workflow and limitations, the same applicability groups with that round's names, results and reasons, and its immutable findings table.
 Table labels and reasons escape pipes, newlines and HTML; mention syntax is interrupted with a zero-width space.
 The [CLI guide](../../../bin/cli/README.md#public-summary-text) shows how to write concise scope, depth, limitation and reason text.
 
@@ -350,7 +365,7 @@ Paths, profile contents, rendering inputs and rendered bodies remain masked or a
 Error records disclose typed renderer categories and mark dependency causes as opaque, without formatting local diagnostic strings.
 
 Run `cargo test -p review-kit-json2md-adapter` for renderer and profile regression tests.
-They cover default bodies, summary section order and nesting, input contract versions, historical rows, export equivalence, custom schemas/templates, missing data, invalid assets and suggestion formatting.
+They cover default bodies, where each round's findings and supporting details appear, a complete two-round summary, input contract versions, historical rows, export equivalence, custom schemas/templates, missing data, invalid assets and suggestion formatting.
 Observation tests inspect actual JSON, parent execution IDs and sensitive-value exclusion on success and diagnostic paths.
 The [CLI tests](../../../bin/cli/tests/) cover actual command selection and HTTP publication wiring.
 Live GitLab behavior requires the separately authorized [GitLab suite](../../../../tests/gitlab/README.md).

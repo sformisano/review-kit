@@ -6,7 +6,7 @@ use std::error::Error;
 
 use review_kit_application::{
     publication::*,
-    summary::{SummaryView, summary_view},
+    summary::{HistoricalFinding, PublishedAction, SummaryView, summary_view},
     use_cases::checkpoints::ApplicabilityStatus,
 };
 use review_kit_domain::*;
@@ -422,6 +422,24 @@ pub fn root(finding: &Finding, created_in: u64) -> Result<FindingRecord, Box<dyn
         body: "published body".into(),
         resolved: false,
     })
+}
+
+/// The verified rows an earlier round communicated, each under the root that
+/// [`root`] gives its finding.
+pub fn communicated(
+    rows: Vec<(Finding, Vec<PublishedAction>)>,
+) -> Result<Vec<HistoricalFinding>, Box<dyn Error>> {
+    rows.into_iter()
+        .map(|(finding, actions)| {
+            let root = root(&finding, 1)?;
+            Ok(HistoricalFinding {
+                finding,
+                root_note: root.root_note,
+                thread: root.id,
+                actions,
+            })
+        })
+        .collect()
 }
 
 /// The summary view of `current` after its findings were posted, projected by

@@ -1,4 +1,4 @@
-{# Visible: decision, recap, limitation, status and findings. Everything else sits in Review details. -#}
+{# Visible: decision, recap, limitation, status and findings. Each earlier round, oldest first, and then the current round's Review details follow as sibling collapsed sections; no section nests another. -#}
 ### {{ round.decision }}
 
 Round {{ round.number }}{% if counts.open %} · {{ counts.open }} open{% endif %}{% if counts.fixed %} · {{ counts.fixed }} fixed{% endif %}{% if counts.withdrawn %} · {{ counts.withdrawn }} withdrawn{% endif %}{% if counts.uncertain %} · {{ counts.uncertain }} uncertain{% endif %}{% if not counts.total and not unpublished %} · no findings{% endif %}
@@ -15,10 +15,49 @@ This round was stopped before it finished posting.
 {% endif %}{% if findings %}
 | ID | Finding | Severity | Status | This round |
 | --- | --- | --- | --- | --- |
-{% for finding in findings %}| F{{ finding.id }} | {% if finding.url is not none %}[{{ finding.title_markdown }}](<{{ finding.url }}>){% else %}{{ finding.title_markdown }}{% endif %} | {{ finding.severity }} | {{ finding.status }} | {% for action in finding.actions %}{% if action.kind == "created" %}Posted{% elif action.kind == "transition" %}{% if action.from == action.to %}Updated{% else %}{{ action.from }} → {{ action.to }}{% endif %}{% elif action.kind == "answered" %}Answered{% elif action.label == "Observed resolved" %}resolved (found){% elif action.label == "Observed reopened" %}reopened (found){% else %}{{ action.label | lower }}{% endif %}{% if not loop.last %}, {% endif %}{% else %}—{% endfor %} |
+{% for finding in findings %}| F{{ finding.id }} | {% if finding.url is not none %}[{{ finding.title_markdown }}](<{{ finding.url }}>){% else %}{{ finding.title_markdown }}{% endif %} | {{ finding.severity }} · {{ finding.disposition }} | {{ finding.status }} | {% for action in finding.actions %}{% if action.kind == "created" %}Posted{% elif action.kind == "transition" %}{% if action.from == action.to %}Updated{% else %}{{ action.from }} → {{ action.to }}{% endif %}{% elif action.kind == "answered" %}Answered{% elif action.label == "Observed resolved" %}resolved (observed){% elif action.label == "Observed reopened" %}reopened (observed){% else %}{{ action.label | lower }}{% endif %}{% if not loop.last %}, {% endif %}{% else %}—{% endfor %} |
 {% endfor %}{% endif %}{% if unpublished %}
 Not posted yet: {% for id in unpublished %}F{{ id }}{% if not loop.last %}, {% endif %}{% endfor %}
+{% endif %}{% for old in history | reverse %}
+<details>
+<summary>Round {{ old.number }} · {{ old.decision }}{% if old.status not in ["Completed", "Blocked"] %} · {{ old.status | lower }}{% endif %}</summary>
+
+- {{ old.revision_kind }} commit `{{ old.revision.head[:12] }}`{% if old.revision.comparison %} against `{{ old.revision.comparison[0][:12] }}`{% endif %}
+- Scope: {{ old.scope_markdown }}
+- Depth: {{ old.depth_markdown }}
+{% if old.review_workflow_markdown is not none or old.policy_set_markdown is not none %}- Workflow: {{ old.review_workflow_markdown if old.review_workflow_markdown is not none else "unknown" }}, policy set {{ old.policy_set_markdown if old.policy_set_markdown is not none else "unknown" }}
+{% endif %}{% if old.limitation_markdown is not none %}- Limitation: {{ old.limitation_markdown }}
+{% endif %}{% if old.publication_limitation is not none %}- Publishing: {{ old.publication_limitation }}
+{% endif %}{% if old.abandonment_markdown is not none %}- Stopped: {{ old.abandonment_markdown }}
+{% endif %}{% set earlier = namespace(applicable=0, unresolved=0, excluded=0) %}{% for policy in policies %}{% for declaration in policy.declarations if declaration.round == old.number %}{% if declaration.status == "Applicable" %}{% set earlier.applicable = earlier.applicable + 1 %}{% elif declaration.status == "Excluded" %}{% set earlier.excluded = earlier.excluded + 1 %}{% else %}{% set earlier.unresolved = earlier.unresolved + 1 %}{% endif %}{% endfor %}{% endfor %}{% if earlier.applicable %}
+**Applicable policies ({{ earlier.applicable }})**
+
+| Policy | Result | Reason |
+| --- | --- | --- |
+{% for policy in policies %}{% for declaration in policy.declarations if declaration.round == old.number and declaration.status == "Applicable" %}| {{ declaration.name_markdown }} | {% if declaration.result is none %}—{% elif declaration.result.kind == "Satisfied" %}Pass{% elif declaration.result.kind == "Violated" %}Fail{% elif declaration.result.limitation == declaration.reason %}Blocked{% elif declaration.result.limitation == old.limitation %}Blocked: see the limitation above{% else %}Blocked: {{ declaration.result.limitation_markdown }}{% endif %} | {{ declaration.reason_markdown }} |
+{% endfor %}{% endfor %}{% endif %}{% if earlier.unresolved %}
+**Policies with unresolved applicability ({{ earlier.unresolved }})**
+
+| Policy | Result | Reason |
+| --- | --- | --- |
+{% for policy in policies %}{% for declaration in policy.declarations if declaration.round == old.number and declaration.status == "Unresolved" %}| {{ declaration.name_markdown }} | {% if declaration.result is none %}—{% elif declaration.result.kind == "Satisfied" %}Pass{% elif declaration.result.kind == "Violated" %}Fail{% elif declaration.result.limitation == declaration.reason %}Blocked{% elif declaration.result.limitation == old.limitation %}Blocked: see the limitation above{% else %}Blocked: {{ declaration.result.limitation_markdown }}{% endif %} | {{ declaration.reason_markdown }} |
+{% endfor %}{% endfor %}{% endif %}{% if earlier.excluded %}
+**Excluded policies ({{ earlier.excluded }})**
+
+| Policy | Reason |
+| --- | --- |
+{% for policy in policies %}{% for declaration in policy.declarations if declaration.round == old.number and declaration.status == "Excluded" %}| {{ declaration.name_markdown }} | {{ declaration.reason_markdown }} |
+{% endfor %}{% endfor %}{% endif %}{% if not (earlier.applicable or earlier.unresolved or earlier.excluded) %}
+No policies were declared.
 {% endif %}
+{% if not old.history_available %}Findings for this round were not recorded.
+{% elif old.findings %}| ID | Finding | Severity | Status | That round |
+| --- | --- | --- | --- | --- |
+{% for finding in old.findings %}| F{{ finding.id }} | {% if finding.url is not none %}[{{ finding.title_markdown }}](<{{ finding.url }}>){% else %}{{ finding.title_markdown }}{% endif %} | {{ finding.severity }} · {{ finding.disposition }} | {{ finding.status }} | {% for action in finding.actions %}{% if action.kind == "created" %}Posted{% elif action.kind == "transition" %}{% if action.from == action.to %}Updated{% else %}{{ action.from }} → {{ action.to }}{% endif %}{% elif action.kind == "answered" %}Answered{% elif action.label == "Observed resolved" %}resolved (observed){% elif action.label == "Observed reopened" %}reopened (observed){% else %}{{ action.label | lower }}{% endif %}{% if not loop.last %}, {% endif %}{% else %}—{% endfor %} |
+{% endfor %}{% else %}No findings were posted.
+{% endif %}
+</details>
+{% endfor %}
 <details>
 <summary>Review details</summary>
 
@@ -28,41 +67,31 @@ Not posted yet: {% for id in unpublished %}F{{ id }}{% if not loop.last %}, {% e
 {% if round.review_workflow_markdown is not none or round.policy_set_markdown is not none %}- Workflow: {{ round.review_workflow_markdown if round.review_workflow_markdown is not none else "unknown" }}, policy set {{ round.policy_set_markdown if round.policy_set_markdown is not none else "unknown" }}
 {% endif %}{% if round.publication_limitation is not none %}- Publishing: {{ round.publication_limitation }}
 {% endif %}{% if round.abandonment_markdown is not none %}- Stopped: {{ round.abandonment_markdown }}
-{% endif %}
-**Policies**
+{% endif %}{# Each policy appears once, in the group of its applicability in the round; a blocked limitation already shown in full is referenced, not repeated. #}{% set coverage = namespace(applicable=0, unresolved=0, excluded=0, excluded_open=0, undeclared=0) %}{% for policy in policies %}{% for declaration in policy.declarations if declaration.round == round.number %}{% if declaration.status == "Applicable" %}{% set coverage.applicable = coverage.applicable + 1 %}{% elif declaration.status == "Excluded" %}{% set coverage.excluded = coverage.excluded + 1 %}{% for finding in findings if finding.policy.id == policy.id and finding.status == "Open" %}{% set coverage.excluded_open = coverage.excluded_open + 1 %}{% endfor %}{% else %}{% set coverage.unresolved = coverage.unresolved + 1 %}{% endif %}{% else %}{% set coverage.undeclared = coverage.undeclared + 1 %}{% endfor %}{% endfor %}{% if coverage.applicable %}
+**Applicable policies ({{ coverage.applicable }})**
 
-| Policy | Applies | Result | Open findings |
+| Policy | Result | Open findings | Reason |
 | --- | --- | --- | --- |
-{% for policy in policies %}| {% if policy.name_markdown is not none %}{{ policy.name_markdown }}{% else %}{{ policy.id_markdown }}{% endif %} | {% for declaration in policy.declarations if declaration.round == round.number %}{% if declaration.status == "Applicable" %}Yes{% elif declaration.status == "Excluded" %}No: {{ declaration.reason_markdown }}{% else %}Unresolved: {{ declaration.reason_markdown }}{% endif %}{% else %}Not in this round's inventory{% if policy.rounds %} (applied in {% if policy.rounds | length == 1 %}round{% else %}rounds{% endif %} {% for number in policy.rounds %}{{ number }}{% if not loop.last %}, {% endif %}{% endfor %}){% endif %}{% endfor %} | {% if policy.result is none %}—{% elif policy.result.kind == "Satisfied" %}Pass{% elif policy.result.kind == "Violated" %}Fail{% else %}Not checked{% endif %} | {% for finding in findings if finding.policy.id == policy.id and finding.status == "Open" %}F{{ finding.id }}{% if not loop.last %}, {% endif %}{% else %}—{% endfor %} |
-{% endfor %}{% for policy in policies if policy.result is not none and policy.result.kind == "Blocked" %}
-**{% if policy.name_markdown is not none %}{{ policy.name_markdown | trim }}{% else %}{{ policy.id_markdown }}{% endif %}** was not checked: {{ policy.result.limitation_markdown }}
-{% endfor %}{% for policy in policies %}{% for declaration in policy.declarations if declaration.round == round.number and declaration.status == "Applicable" %}
-**{{ declaration.name_markdown }}** applies: {{ declaration.reason_markdown }}
-{% endfor %}{% endfor %}{% if history %}
-**Earlier rounds**
-{% for old in history %}
-<details>
-<summary>Round {{ old.number }} · {{ old.decision }}{% if old.status not in ["Completed", "Blocked"] %} · {{ old.status | lower }}{% endif %}</summary>
+{% for policy in policies %}{% for declaration in policy.declarations if declaration.round == round.number and declaration.status == "Applicable" %}| {{ declaration.name_markdown }} | {% if policy.result is none %}—{% elif policy.result.kind == "Satisfied" %}Pass{% elif policy.result.kind == "Violated" %}Fail{% elif policy.result.limitation == declaration.reason %}Blocked{% elif policy.result.limitation == round.limitation %}Blocked: see the limitation above{% else %}Blocked: {{ policy.result.limitation_markdown }}{% endif %} | {% for finding in findings if finding.policy.id == policy.id and finding.status == "Open" %}F{{ finding.id }}{% if not loop.last %}, {% endif %}{% else %}—{% endfor %} | {{ declaration.reason_markdown }} |
+{% endfor %}{% endfor %}{% endif %}{% if coverage.unresolved %}
+**Policies with unresolved applicability ({{ coverage.unresolved }})**
 
-- {{ old.revision_kind }} commit `{{ old.revision.head[:12] }}`{% if old.revision.comparison %} against `{{ old.revision.comparison[0][:12] }}`{% endif %}
-- Scope: {{ old.scope_markdown }}
-- Depth: {{ old.depth_markdown }}
-{% if old.limitation_markdown is not none %}- Limitation: {{ old.limitation_markdown }}
-{% endif %}{% if old.publication_limitation is not none %}- Publishing: {{ old.publication_limitation }}
-{% endif %}{% if old.abandonment_markdown is not none %}- Stopped: {{ old.abandonment_markdown }}
-{% endif %}
-**Policies**
+| Policy | Result | Open findings | Reason |
+| --- | --- | --- | --- |
+{% for policy in policies %}{% for declaration in policy.declarations if declaration.round == round.number and declaration.status == "Unresolved" %}| {{ declaration.name_markdown }} | {% if policy.result is none %}—{% elif policy.result.kind == "Satisfied" %}Pass{% elif policy.result.kind == "Violated" %}Fail{% elif policy.result.limitation == declaration.reason %}Blocked{% elif policy.result.limitation == round.limitation %}Blocked: see the limitation above{% else %}Blocked: {{ policy.result.limitation_markdown }}{% endif %} | {% for finding in findings if finding.policy.id == policy.id and finding.status == "Open" %}F{{ finding.id }}{% if not loop.last %}, {% endif %}{% else %}—{% endfor %} | {{ declaration.reason_markdown }} |
+{% endfor %}{% endfor %}{% endif %}{% if coverage.excluded %}
+**Excluded policies ({{ coverage.excluded }})**
 
-| Policy | Applies | Result |
-| --- | --- | --- |
-{% for policy in policies %}{% for declaration in policy.declarations if declaration.round == old.number %}| {{ declaration.name_markdown }} | {% if declaration.status == "Applicable" %}Yes{% elif declaration.status == "Excluded" %}No{% else %}Unresolved{% endif %}: {{ declaration.reason_markdown }} | {% if declaration.result is none %}—{% elif declaration.result.kind == "Satisfied" %}Pass{% elif declaration.result.kind == "Violated" %}Fail{% else %}Not checked{% endif %} |
-{% endfor %}{% endfor %}
-{% if not old.history_available %}Findings for this round were not recorded.
-{% elif old.findings %}| ID | Finding | Severity | Status | That round |
-| --- | --- | --- | --- | --- |
-{% for finding in old.findings %}| F{{ finding.id }} | {% if finding.url is not none %}[{{ finding.title_markdown }}](<{{ finding.url }}>){% else %}{{ finding.title_markdown }}{% endif %} | {{ finding.severity }} | {{ finding.status }} | {% for action in finding.actions %}{% if action.kind == "created" %}Posted{% elif action.kind == "transition" %}{% if action.from == action.to %}Updated{% else %}{{ action.from }} → {{ action.to }}{% endif %}{% elif action.kind == "answered" %}Answered{% elif action.label == "Observed resolved" %}resolved (found){% elif action.label == "Observed reopened" %}reopened (found){% else %}{{ action.label | lower }}{% endif %}{% if not loop.last %}, {% endif %}{% else %}—{% endfor %} |
-{% endfor %}{% else %}No findings were posted.
+| Policy |{% if coverage.excluded_open %} Open findings |{% endif %} Reason |
+| --- |{% if coverage.excluded_open %} --- |{% endif %} --- |
+{% for policy in policies %}{% for declaration in policy.declarations if declaration.round == round.number and declaration.status == "Excluded" %}| {{ declaration.name_markdown }} |{% if coverage.excluded_open %} {% for finding in findings if finding.policy.id == policy.id and finding.status == "Open" %}F{{ finding.id }}{% if not loop.last %}, {% endif %}{% else %}—{% endfor %} |{% endif %} {{ declaration.reason_markdown }} |
+{% endfor %}{% endfor %}{% endif %}{% if coverage.undeclared %}
+**Policies not declared in this round ({{ coverage.undeclared }})**
+
+| Policy | Earlier applicable rounds |
+| --- | --- |
+{% for policy in policies %}{% for declaration in policy.declarations if declaration.round == round.number %}{% else %}| {% if policy.name_markdown is not none %}{{ policy.name_markdown }}{% else %}{{ policy.id_markdown }}{% endif %} | {% for number in policy.rounds %}{{ number }}{% if not loop.last %}, {% endif %}{% else %}—{% endfor %} |
+{% endfor %}{% endfor %}{% endif %}{% if not policies %}
+No policies were declared.
 {% endif %}
-</details>
-{% endfor %}{% endif %}
 </details>

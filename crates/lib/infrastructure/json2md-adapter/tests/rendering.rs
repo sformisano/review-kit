@@ -4,7 +4,10 @@ use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag, TagEnd};
 use review_kit_application::ports::*;
 use review_kit_domain::*;
 use review_kit_json2md_adapter::Json2MdRenderer;
-use support::{sections::layout, *};
+use support::{
+    sections::{groups, layout},
+    *,
+};
 
 pub fn parsed_suggestions(body: &str) -> Vec<(String, String)> {
     let mut blocks = vec![];
@@ -359,7 +362,12 @@ fn summary_shows_decision_findings_details_and_immutable_historical_rows() -> Te
     );
     assert!(!body.contains("discussion-abc"));
     assert!(!body.contains("#note_10"));
-    let current = sections.section("Review details")?;
+    let details = sections.section("Review details")?;
+    let rounds = groups(details);
+    assert!(rounds.lead.trim().is_empty(), "{body}");
+    assert_eq!(rounds.headings(), ["Round 2", "Round 1"], "{body}");
+    let current = rounds.group("Round 2")?;
+    let earlier = rounds.group("Round 1")?;
     let history = sections.section("Round 1 · Changes required")?;
     for line in [
         "- Attempted commit `111111111111` against `222222222222`",
@@ -376,17 +384,30 @@ fn summary_shows_decision_findings_details_and_immutable_historical_rows() -> Te
             "{line}: {current}"
         );
     }
-    assert!(history.contains("- Reviewed commit `111111111111` against `222222222222`"));
-    assert!(
-        history.contains(
-            "\n- Workflow: codebase-policies-review, policy set rust-codebase-policies\n"
-        )
-    );
-    assert!(history.contains("- Limitation: Review context is incomplete"));
+    for line in [
+        "- Reviewed commit `111111111111` against `222222222222`",
+        "- Scope: src/\\[lib\\].rs&#10;&lt;details&gt;",
+        "- Depth: Standard &#124; focused",
+        "- Workflow: codebase-policies-review, policy set rust-codebase-policies",
+        "- Limitation: Review context is incomplete",
+        "| Policy | Result | Reason |",
+        "| Rust Error Contracts | Fail | The changed error handling requires this policy. |",
+    ] {
+        assert!(
+            earlier.lines().any(|value| value == line),
+            "{line}: {earlier}"
+        );
+    }
     assert!(history.contains("| ID | Finding | Severity | Status | That round |"));
     assert!(history.contains("| P2 · Blocking | Open | Posted |"));
     assert!(!history.contains("| Fixed |"));
-    assert!(!current.contains("| ID |"), "{current}");
+    assert!(
+        history
+            .lines()
+            .all(|line| line.is_empty() || line.starts_with("| ")),
+        "{history}"
+    );
+    assert!(!details.contains("| ID |"), "{details}");
     assert_eq!(body, renderer.summary(&view)?);
     Ok(())
 }

@@ -15,6 +15,8 @@ use super::{TOKEN, server};
 pub const ERROR_POLICY: &str = "rust-error-contracts";
 pub const OWNERSHIP_POLICY: &str = "rust-ownership-design";
 pub const POLICY_SET: &str = "rust-codebase-policies";
+/// The summary template embedded in rkc 0.1.0.
+pub const PREVIOUS_DEFAULT_SUMMARY: &str = include_str!("previous-default-summary.j2");
 
 pub struct Fixture {
     pub root: TempDir,
@@ -257,6 +259,14 @@ impl Fixture {
             manifest: directory.join("profile.json"),
         };
         assert!(profile.manifest.is_file());
+        profile
+    }
+
+    /// Exports this build's profile with the previous default summary
+    /// template; together they restore the profile that rkc 0.1.0 embeds.
+    pub fn export_previous_default(&self, directory: &str) -> Profile {
+        let profile = self.export(directory);
+        profile.template("summary", PREVIOUS_DEFAULT_SUMMARY);
         profile
     }
 

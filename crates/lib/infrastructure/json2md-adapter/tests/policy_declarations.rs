@@ -11,7 +11,7 @@ use review_kit_application::{
 };
 use review_kit_domain::*;
 use review_kit_json2md_adapter::Json2MdRenderer;
-use support::sections::layout;
+use support::sections::{groups, layout};
 
 fn declared_view() -> Result<SummaryView, Box<dyn Error>> {
     let mut current = support::summary()?.round;
@@ -110,8 +110,15 @@ fn full_inventory_distinguishes_exclusion_unresolved_applicability_and_blocked_p
     let [(0, round), (0, "Review details")] = sections.outline()[..] else {
         return Err(format!("expected one earlier round, then review details: {body}").into());
     };
-    let current = sections.section("Review details")?;
-    let history = sections.section(round)?;
+    assert_eq!(
+        sections.section(round)?.trim(),
+        "Findings for this round were not recorded.",
+        "{body}"
+    );
+    let details = groups(sections.section("Review details")?);
+    assert_eq!(details.headings(), ["Round 2", "Round 1"], "{body}");
+    let current = details.group("Round 2")?;
+    let history = details.group("Round 1")?;
     for row in [
         "| Applicable with blocked proof | Blocked: Proof logs are unavailable. | — | This change requires the policy. |",
         "| Unavailable policy | Blocked | — | The selected definition is unavailable. |",
@@ -139,11 +146,20 @@ fn full_inventory_distinguishes_exclusion_unresolved_applicability_and_blocked_p
     };
     let absent = summary_view(&removed, &view.history, &snapshot)?;
     let body = Json2MdRenderer::new()?.summary(&absent)?;
+    let sections = layout(&body)?;
+    let details = groups(sections.section("Review details")?);
     assert!(
-        body.contains(
+        details.group("Round 2")?.contains(
             "\n**Policies not declared in this round (1)**\n\n| Policy | Earlier applicable rounds |\n| --- | --- |\n| Original Async Work | — |\n"
         ),
         "{body}"
+    );
+    let history = details.group("Round 1")?;
+    assert!(
+        history
+            .lines()
+            .any(|line| line == "| Original Async Work | Original exclusion reason. |"),
+        "{history}"
     );
     Ok(())
 }
