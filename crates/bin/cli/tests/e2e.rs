@@ -38,6 +38,10 @@ fn managed_cli_workflow() -> anyhow::Result<()> {
     scenarios::custom_profile_review(fixture::Fixture::setup_with(
         service.endpoint(),
         service.admin_token(),
+    )?)?;
+    scenarios::conversation_freshness_scope(fixture::Fixture::setup_with(
+        service.endpoint(),
+        service.admin_token(),
     )?)
 }
 
@@ -69,4 +73,10 @@ fn external_offline_invalid_inputs_and_private_bodies() -> anyhow::Result<()> {
 #[ignore = "requires an external local GitLab server and administrator credential"]
 fn external_custom_profile_review() -> anyhow::Result<()> {
     scenarios::custom_profile_review(fixture::Fixture::setup()?)
+}
+
+#[test]
+#[ignore = "requires an external local GitLab server and administrator credential"]
+fn external_conversation_freshness_scope() -> anyhow::Result<()> {
+    scenarios::conversation_freshness_scope(fixture::Fixture::setup()?)
 }

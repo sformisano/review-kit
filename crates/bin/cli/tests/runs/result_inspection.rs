@@ -259,10 +259,10 @@ fn guide_outer_error_and_stage_check_paths_exist() {
         accepted
     );
 
-    harness.add_comment("late-question", "Is the error cause kept?");
+    harness.push_commit();
     let changed = run(&harness, &["publish", "--effects", "review", "--plan"], 3);
-    assert_paths("conversation changed", &changed, OUTER_ERROR);
-    assert_eq!(changed["diagnostics"][0]["code"], "conversation_changed");
+    assert_paths("source changed", &changed, OUTER_ERROR);
+    assert_eq!(changed["diagnostics"][0]["code"], "source_changed");
     assert!(changed.get("command").is_none(), "{changed:#}");
 }
 

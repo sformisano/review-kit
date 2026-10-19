@@ -102,8 +102,8 @@ Fixtures create private nested projects and separate author and reviewer users.
 The author has Maintainer access to seed the protected default branch. The
 adapter uses the reviewer's Developer token, never the administrator token.
 A second token for the same reviewer has only `read_api` scope.
-The conversation scenario adds a Developer commenter and a project access
-token bot user. When the server refuses the token, the scenario skips the bot
+The conversation scenarios add a Developer commenter and a project access
+token bot user. When the server refuses the token, a scenario skips the bot
 note and says so in its output.
 
 The scenarios verify:
@@ -122,7 +122,12 @@ The scenarios verify:
   bot, unmanaged inline and resolvable thread notes match independent REST
   reads, with verbatim positions. System notes are excluded. Edited and
   deleted notes are reflected. A later edit and resolution change are
-  reported as freshness differences.
+  reported as differences from the capture.
+- Publication freshness scoped to the reviewer's threads with real discovery.
+  After a published round, notes by the commenter and the bot, a diff thread
+  that copies a finding marker, a foreign resolution and title and description
+  edits are outside the scope; the author's reply and resolution in the
+  reviewer's finding thread are the only owned changes.
 
 An independent REST fixture client inspects GitLab state after application
 operations. A deterministic renderer supplies test bodies; this suite does not

@@ -10,6 +10,8 @@ use super::{
 
 #[path = "scenarios/clean.rs"]
 mod clean;
+#[path = "scenarios/freshness.rs"]
+mod freshness;
 #[path = "scenarios/initial.rs"]
 mod initial;
 #[path = "scenarios/invalid.rs"]
@@ -19,6 +21,7 @@ mod outdated;
 #[path = "scenarios/render_profiles.rs"]
 mod render_profiles;
 pub use clean::clean_blocked_permissions_and_controls;
+pub use freshness::conversation_freshness_scope;
 pub use initial::initial_fixed_and_recurrent_review;
 pub use invalid::offline_invalid_inputs_and_private_bodies;
 pub use outdated::outdated_position_followup;

@@ -83,10 +83,19 @@ retained files and assessments, private-body exclusion and actual Developer
 `read_api` write rejection. [Authority controls](../../crates/bin/cli/tests/e2e/controls.rs)
 cover planning, missing authority, reviewer mismatch, partial publication,
 a retained unknown write that blocks another worktree's run, abandonment, a
-subsequent round and a run whose retained conversation went stale.
+subsequent round and a run captured before the reviewer's summary changed.
 Controlled HTTP and adapter suites cover transport loss and source variants.
 The managed suite also exports a custom profile and verifies every role against
 GitLab, followed by an unchanged retry and a fix on a new commit.
+
+The [conversation freshness scenario](../../crates/bin/cli/tests/e2e/scenarios/freshness.rs)
+adds a Developer commenter and a project access token bot user. After each
+capture they post notes, start, reply in and resolve a diff thread, copy Review
+Kit markers into their notes, and the author edits the title and description.
+Publication still completes with exactly its planned effects, and independent
+REST reads show every foreign note unchanged. A reply or a resolution change in
+the reviewer's own threads refuses planning and publication with
+`conversation_changed` and writes nothing.
 
 Each scenario owns a unique private namespace and a `tempfile` directory under
 ignored `tests/cli/.local/`. Success requests deletion of the exact verified

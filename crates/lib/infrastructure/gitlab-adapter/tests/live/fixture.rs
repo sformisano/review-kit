@@ -224,6 +224,8 @@ impl Fixture {
         }
     }
     /// Another group member whose user this fixture deletes on cleanup.
+    ///
+    /// Returns once the member can read the project.
     pub fn add_user(&mut self, role: &str, access_level: u64) -> User {
         let user = create_user(&self.admin, &format!("{}-{role}", self.name));
         self.admin.post(
@@ -231,7 +233,31 @@ impl Fixture {
             json!({"user_id":user.id,"access_level":access_level}),
         );
         self.users.push(user.id);
+        self.wait_for_access(&user.api);
         user
+    }
+    /// Waits until `api` can read the project; GitLab can grant project
+    /// access to a new member after the membership request returns.
+    fn wait_for_access(&self, api: &Api) {
+        let deadline = Instant::now() + Duration::from_secs(120);
+        loop {
+            let status = api
+                .raw(
+                    Method::GET,
+                    &format!("projects/{}", self.project),
+                    Value::Null,
+                )
+                .status;
+            if status == 200 {
+                return;
+            }
+            assert_eq!(status, 404, "the new member cannot read the project");
+            assert!(
+                Instant::now() < deadline,
+                "project access did not reach the new member"
+            );
+            thread::sleep(Duration::from_millis(250));
+        }
     }
     /// A project access token's bot user, or `None` when the server refuses
     /// to create one. Project deletion removes the bot with its token.
@@ -253,13 +279,15 @@ impl Fixture {
             return None;
         }
         let token: Value = response.json().unwrap();
-        Some(User {
+        let bot = User {
             id: token["user_id"].as_u64().unwrap(),
             api: Api::new(
                 self.admin.url.clone(),
                 token["token"].as_str().unwrap().into(),
             ),
-        })
+        };
+        self.wait_for_access(&bot.api);
+        Some(bot)
     }
     pub fn connect(&self) -> GitLab {
         self.connect_as(&self.reviewer.api)

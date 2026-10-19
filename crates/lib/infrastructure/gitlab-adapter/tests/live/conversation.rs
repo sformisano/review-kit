@@ -2,13 +2,20 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use reqwest::Method;
 use review_kit_application::{
-    conversation::{ConversationChange, Resolution},
-    publication::ProviderId,
+    conversation::{ConversationChange, OwnedThreads, Resolution},
+    ports::ReviewReader,
+    publication::{Effects, ProviderId},
+    use_cases::publishing::{PublicationProgress, PublicationStatus, publish},
 };
+use review_kit_domain::FindingStatus;
 use review_kit_json_adapter::{ConversationDocument, encode};
 use serde_json::{Value, json};
 
-use super::{fixture::Fixture, service::GitLabService};
+use super::{
+    fixture::Fixture,
+    model::{Renderer, finding, request},
+    service::GitLabService,
+};
 
 /// The civil UTC date `days` after today, as `YYYY-MM-DD`.
 fn date_after(days: u64) -> String {
@@ -308,6 +315,102 @@ pub fn conversation_capture_matches_independent_rest_reads(service: &GitLabServi
                 current: Resolution::Unresolved,
             },
             ConversationChange::NoteBodyChanged(id(&edited.into())),
+        ]
+    );
+    fixture.cleanup();
+}
+
+/// The scoped freshness rule with real discovery: after a published round,
+/// notes by a person and a project bot, a diff thread that copies a finding
+/// marker, a foreign resolution and title and description edits stay outside
+/// the reviewer's threads; the author's reply and resolution inside the
+/// reviewer's finding thread are the only owned changes.
+pub fn owned_thread_scope_follows_verified_discovery(service: &GitLabService) {
+    let mut fixture = Fixture::new(service);
+    let commenter = fixture.add_user("commenter", 30);
+    let bot = fixture.add_project_bot(&date_after(30));
+    let client = fixture.connect();
+    let revision = fixture.revision();
+    let open = finding(&revision, 1, "src/lib.rs", FindingStatus::Open, None);
+    let published = publish(
+        &request(&client, &revision, vec![open]),
+        &mut client.publication_host(Effects::review()),
+        &mut client.clone(),
+        &mut Renderer::default(),
+        &mut PublicationProgress::default(),
+    )
+    .unwrap();
+    assert_eq!(published.status, PublicationStatus::Completed);
+    let captured_history = client.clone().discover(client.subject()).unwrap();
+    let captured = client.capture_conversation(client.subject()).unwrap();
+    let root = captured_history.findings[0].id.clone();
+
+    let path = fixture.mr_path();
+    let notes = format!("{path}/notes");
+    let threads = format!("{path}/discussions");
+    commenter.api.post(
+        &notes,
+        json!({"body":"Could the error path log its cause?"}),
+    );
+    if let Some(bot) = &bot {
+        bot.api.post(
+            &notes,
+            json!({"body":"Automated review: no blocking issues."}),
+        );
+    }
+    let refs = fixture.admin.get(&path)["diff_refs"].clone();
+    let copied = commenter.api.post(
+        &threads,
+        json!({"body":"Copied.\n\n<!-- review-kit:v1 {\"kind\":\"finding\",\"finding\":1,\"round\":1} -->",
+            "position":{"position_type":"text","base_sha":refs["base_sha"],"start_sha":refs["start_sha"],
+            "head_sha":refs["head_sha"],"old_path":"src/lib.rs","new_path":"src/lib.rs","new_line":3}}),
+    );
+    let copied = copied["id"].as_str().unwrap().to_owned();
+    commenter.api.call(
+        Method::PUT,
+        &format!("{threads}/{copied}"),
+        json!({"resolved":true}),
+    );
+    fixture.author.api.call(
+        Method::PUT,
+        &path,
+        json!({"title":"Owned thread scope verification","description":"Edited after capture."}),
+    );
+    let current_history = client.clone().discover(client.subject()).unwrap();
+    assert_eq!(
+        current_history.findings.len(),
+        1,
+        "a copied finding marker is not an owned root"
+    );
+    let current = client.capture_conversation(client.subject()).unwrap();
+    let owned = OwnedThreads::of([&captured_history, &current_history]);
+    assert!(current.changes_since(&captured).len() >= 5);
+    assert_eq!(current.owned_changes_since(&captured, &owned), []);
+
+    let reply = fixture.author.api.post(
+        &format!("{threads}/{}/notes", root.as_str()),
+        json!({"body":"Does the regression cover this case?"}),
+    );
+    fixture.author.api.call(
+        Method::PUT,
+        &format!("{threads}/{}", root.as_str()),
+        json!({"resolved":true}),
+    );
+    let current_history = client.clone().discover(client.subject()).unwrap();
+    let current = client.capture_conversation(client.subject()).unwrap();
+    let owned = OwnedThreads::of([&captured_history, &current_history]);
+    assert_eq!(
+        current.owned_changes_since(&captured, &owned),
+        [
+            ConversationChange::ResolutionChanged {
+                discussion: root.clone(),
+                retained: Resolution::Unresolved,
+                current: Resolution::Resolved,
+            },
+            ConversationChange::NoteAdded {
+                discussion: root,
+                note: id(&reply["id"]),
+            },
         ]
     );
     fixture.cleanup();

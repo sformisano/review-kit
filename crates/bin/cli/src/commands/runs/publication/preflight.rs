@@ -1,5 +1,5 @@
 use review_kit_application::{
-    conversation::ConversationChange,
+    conversation::{ConversationChange, OwnedThreads},
     publication::Snapshot,
     review_run::RunId,
     use_cases::{
@@ -42,10 +42,11 @@ pub fn discover_current(gitlab: &GitLab, run: &LoadedRun) -> Result<Snapshot, Cl
     .map_err(|error| history::discovery_error(error, gitlab))
 }
 
-/// Reject a merge request whose source or conversation changed since the run's capture.
+/// Reject a merge request whose source or owned threads changed since the run's capture.
 ///
-/// Revision identity covers the head and full comparison. Conversation equality
-/// ignores ordering and observation time.
+/// Revision identity covers the head and full comparison. Conversation changes
+/// count only inside the reviewer's threads of the captured or the current
+/// managed history; ordering and observation time are ignored.
 #[review_kit_observation::operations]
 #[helper]
 pub fn require_fresh(
@@ -68,12 +69,14 @@ pub fn require_fresh(
     let current = gitlab
         .capture_conversation(subject)
         .map_err(CliError::GitLab)?;
-    let changes = current.changes_since(&run.conversation);
+    let captured = run.context.snapshot.clone().into_snapshot()?;
+    let owned = OwnedThreads::of([&captured, snapshot]);
+    let changes = current.owned_changes_since(&run.conversation, &owned);
     if !changes.is_empty() {
         return Err(CliError::state(
             "conversation_changed",
             3,
-            "the merge-request conversation changed since this run captured it; start a new run with rkc run start --new",
+            "the reviewer's own merge-request threads changed since this run captured them; start a new run with rkc run start --new",
         )
         .with_details(json!({"changes": changes.iter().map(change).collect::<Vec<_>>()})));
     }

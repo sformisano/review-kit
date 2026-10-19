@@ -290,42 +290,32 @@ fn unrelated_files_cannot_replace_or_block_the_current_journal() {
 }
 
 #[test]
-fn preflight_rejects_changed_conversation_and_source_before_first_dispatch() {
+fn preflight_rejects_changed_source_before_first_dispatch() {
     let harness = Harness::new();
     let first = harness.ready_run(false);
-    harness.add_comment("question-thread", "Does the new error path keep its cause?");
-    let changed = harness.fails(
-        &["publish", "--effects", "review", "--plan"],
-        3,
-        "conversation_changed",
-    );
-    assert_eq!(
-        changed["diagnostics"][0]["changes"][0]["kind"],
-        "discussion_added"
-    );
-    harness.fails(
-        &["publish", "--effects", "review"],
-        3,
-        "conversation_changed",
-    );
+    harness.push_commit();
+    for args in [
+        vec!["publish", "--effects", "review", "--plan"],
+        vec!["publish", "--effects", "review"],
+    ] {
+        let moved = harness.fails(&args, 3, "source_changed");
+        assert_eq!(moved["diagnostics"][0]["current_head"], "4".repeat(40));
+    }
     assert_eq!(harness.writes(), 0);
     assert_eq!(harness.manifest(&first)["publication_attempted"], false);
     assert!(harness.journal_dir().is_none());
-
-    let second = harness.ready_run(true);
-    harness.push_commit();
-    let moved = harness.fails(&["publish", "--effects", "review"], 3, "source_changed");
-    assert_eq!(moved["diagnostics"][0]["current_head"], "4".repeat(40));
-    assert_eq!(harness.writes(), 0);
     harness.ok(&[
         "run",
         "stop",
         "--reason",
         "Source changed before publication.",
     ]);
-    let third = harness.ready_run(true);
-    assert_ne!(third, second);
-    assert_eq!(harness.manifest(&third)["revision"]["head"], "4".repeat(40));
+    let second = harness.ready_run(true);
+    assert_ne!(second, first);
+    assert_eq!(
+        harness.manifest(&second)["revision"]["head"],
+        "4".repeat(40)
+    );
     let published = harness.ok(&["publish", "--effects", "review"]);
     assert_eq!(published["status"], "settled", "{published:#}");
 }

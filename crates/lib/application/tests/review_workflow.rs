@@ -34,6 +34,9 @@ mod policy_declarations;
 #[path = "review_workflow/blocked_findings.rs"]
 mod blocked_findings;
 
+#[path = "review_workflow/conversation_freshness.rs"]
+mod conversation_freshness;
+
 fn publish(
     request: &PublishRequest,
     host: &mut Host,

@@ -268,8 +268,9 @@ when every resolvable note is resolved; each resolvable note must state
 
 Positions become canonical text through the JSON adapter's
 [`canonical_position`](../json-adapter/README.md#supported-conversation), which
-retained conversation documents also use. Freshness comparison follows the
-[application conversation model](../../application/src/conversation.rs).
+retained conversation documents also use. Publication freshness follows the
+[application conversation model](../../application/README.md#conversation-context-and-freshness):
+it compares only the threads that discovery verifies as the reviewer's.
 
 The MR read and the discussion pages are separate requests, not an atomic
 provider snapshot. A change that lands during capture can appear only in a
@@ -349,8 +350,8 @@ Run the [workspace checks](../../../../README.md#workspace-checks).
 The opt-in [real GitLab suite](../../../../tests/gitlab/README.md) runs these
 ports and application use cases against the pinned local CE image. It verifies
 stored reviews, suggestions, tracked positions, follow-ups, ownership,
-pagination, fork source, conversation capture and read-only-token rejection
-with an ordinary reviewer.
+pagination, fork source, conversation capture, owned-thread freshness scope
+and read-only-token rejection with an ordinary reviewer.
 The fixture renderer supplies deterministic bodies; no product renderer or CLI
 is exercised. Other versions and hosted configurations need their own deployed
 verification. Controlled HTTP fixtures retain transport-failure coverage.

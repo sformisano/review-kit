@@ -313,6 +313,59 @@ impl Fixture {
     fn issue_token(&self, user: &Value, scope: &str) -> Result<String> {
         provision::issue_token(&self.admin, user, scope)
     }
+    /// Adds a Developer participant who is neither the author nor the reviewer;
+    /// cleanup deletes the user.
+    #[allow(dead_code, reason = "used by live freshness scenarios")]
+    pub fn commenter(&mut self) -> Result<Api> {
+        let namespace = self.manifest["namespace"]
+            .as_str()
+            .context("namespace")?
+            .to_owned();
+        let name = format!("{namespace}-commenter");
+        let user = provision::create_user(&self.admin, &name)?;
+        let token_file = self.directory.join("commenter-token");
+        self.manifest["commenter"] =
+            json!({"id": user["id"], "username": name, "token_file": token_file});
+        self.save()?;
+        let token = self.issue_token(&user["id"], "api")?;
+        private_file(&token_file, &token)?;
+        self.tokens.push(token.clone());
+        self.admin.post(
+            &format!("groups/{}/members", self.manifest["group_id"]),
+            &json!({"user_id": user["id"], "access_level": 30}),
+        )?;
+        let api = Api::new(self.manifest["server"].as_str().unwrap(), &token)?;
+        let project = format!("projects/{}", self.manifest["project_id"]);
+        wait_for(
+            || Ok(api.get_if_exists(&project)?.is_some()),
+            "project visible to the commenter",
+        )?;
+        Ok(api)
+    }
+    /// A project access token's bot user with Developer access, such as an
+    /// automated reviewer; deleting the project removes it.
+    #[allow(dead_code, reason = "used by live freshness scenarios")]
+    pub fn project_bot(&mut self) -> Result<Api> {
+        let token = provision::issue_project_token(
+            &self.admin,
+            &self.manifest["project_id"],
+            "automated-reviewer",
+        )?;
+        self.manifest["bot"] = json!({"id": token["user_id"]});
+        self.save()?;
+        let secret = token["token"]
+            .as_str()
+            .context("project access token")?
+            .to_owned();
+        self.tokens.push(secret.clone());
+        let api = Api::new(self.manifest["server"].as_str().unwrap(), &secret)?;
+        let project = format!("projects/{}", self.manifest["project_id"]);
+        wait_for(
+            || Ok(api.get_if_exists(&project)?.is_some()),
+            "project visible to the bot",
+        )?;
+        Ok(api)
+    }
     #[allow(dead_code, reason = "used by live permission scenarios")]
     pub fn read_only_token(&mut self) -> Result<String> {
         let token = self.issue_token(&self.manifest["reviewer"]["id"], "read_api")?;
@@ -641,8 +694,11 @@ impl Fixture {
             format!("projects/{}", self.manifest["project_id"]),
             format!("groups/{}", self.manifest["group_id"]),
         ];
-        for role in ["author", "reviewer"] {
+        for role in ["author", "reviewer", "commenter"] {
             let retained = &self.manifest[role];
+            if role == "commenter" && retained.is_null() {
+                continue;
+            }
             let user = self.admin.get(&format!("users/{}", retained["id"]))?;
             ensure!(
                 user["username"] == retained["username"]

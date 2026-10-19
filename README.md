@@ -195,9 +195,13 @@ Publication requires an accepted assessment, a draft equal to its frozen snapsho
 the requested operations are allowed by the configuration. GitLab also checks the
 account's permissions and token scope.
 
-Before the first write, the current head, comparison and supported conversation
-must still equal the run's capture. A change fails with `source_changed` or
-`conversation_changed` (exit `3`); assess it in a new run with `rkc run start --new`.
+Before the first write, the current head and comparison must still equal the
+run's capture, and the reviewer's own summary and finding threads must be
+unchanged. A change fails with `source_changed` or `conversation_changed`
+(exit `3`); assess it in a new run with `rkc run start --new`. Comments by other
+people or bots outside those threads, and title or description edits, do not
+block; the [publication reference](crates/bin/cli/README.md#publication-and-recovery)
+defines the rule.
 Publication communicates the assessed snapshot, not later events.
 
 For a first review with findings, Review Kit:

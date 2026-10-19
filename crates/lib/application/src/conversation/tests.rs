@@ -284,3 +284,258 @@ fn positions_require_object_text() {
         );
     }
 }
+
+/// The reviewer's summary note `100` alone in `summary`, its finding thread
+/// `finding` with an author question, a foreign diff thread and a bot note.
+fn reviewed() -> Result<(Conversation, OwnedThreads), Box<dyn Error>> {
+    let conversation = Conversation::new(
+        subject(1)?,
+        "Accept JSON input".into(),
+        "Keep the positive quantity contract.".into(),
+        vec![
+            Discussion::new(
+                id("summary")?,
+                Resolution::NotResolvable,
+                vec![note("100", "42", "Review summary.", None)?],
+            )?,
+            Discussion::new(
+                id("finding")?,
+                Resolution::Unresolved,
+                vec![
+                    note("200", "42", "Zero passes validation.", Some(ANCHOR))?,
+                    note("201", "5", "Does the regression cover it?", None)?,
+                ],
+            )?,
+            Discussion::new(
+                id("foreign")?,
+                Resolution::Unresolved,
+                vec![note("300", "77", "Comment this line.", Some(ANCHOR))?],
+            )?,
+            Discussion::new(
+                id("bot")?,
+                Resolution::NotResolvable,
+                vec![note("400", "91", "Automated report.", None)?],
+            )?,
+        ],
+    )?;
+    let owned = OwnedThreads {
+        summary_notes: BTreeSet::from([id("100")?]),
+        finding_discussions: BTreeSet::from([id("finding")?]),
+    };
+    Ok((conversation, owned))
+}
+
+fn with_text(
+    original: &Conversation,
+    subject: Subject,
+    title: &str,
+    description: &str,
+) -> Result<Conversation, Box<dyn Error>> {
+    Ok(Conversation::new(
+        subject,
+        title.into(),
+        description.into(),
+        original.discussions().to_vec(),
+    )?)
+}
+
+#[test]
+fn foreign_activity_and_request_text_are_outside_the_owned_scope() -> TestResult {
+    let (retained, owned) = reviewed()?;
+    let edited = rebuild(&retained, |parts| {
+        let foreign = &mut parts[2];
+        foreign.1 = Resolution::Resolved;
+        foreign.2[0].body = "Comment this added line.".into();
+        foreign
+            .2
+            .push(note("301", "91", "Suggested wording.", None)?);
+        parts.remove(3);
+        parts.push((
+            id("copied")?,
+            Resolution::Unresolved,
+            vec![note(
+                "500",
+                "77",
+                "Copied.\n\n<!-- review-kit:v1 {\"kind\":\"finding\",\"finding\":1,\"round\":1} -->",
+                Some(ANCHOR),
+            )?],
+        ));
+        parts.push((
+            id("duo")?,
+            Resolution::NotResolvable,
+            vec![note("600", "91", "Automated review.", None)?],
+        ));
+        Ok(())
+    })?;
+    let current = with_text(
+        &edited,
+        subject(1)?,
+        "Accept JSON and YAML input",
+        "A new description.",
+    )?;
+    assert_eq!(current.changes_since(&retained).len(), 11);
+    assert_eq!(current.owned_changes_since(&retained, &owned), []);
+    Ok(())
+}
+
+#[test]
+fn every_change_inside_an_owned_thread_is_reported() -> TestResult {
+    let (retained, owned) = reviewed()?;
+    let moved_anchor = r#"{"new_line":4,"new_path":"src/lib.rs","position_type":"text"}"#;
+    let current = rebuild(&retained, |parts| {
+        parts[0].1 = Resolution::Unresolved;
+        parts[0].2[0].body = "Review summary, edited by a maintainer.".into();
+        parts[0]
+            .2
+            .push(note("101", "77", "A reply to the summary.", None)?);
+        let finding = &mut parts[1];
+        finding.1 = Resolution::Resolved;
+        finding.2[0].position = Some(Position::from_canonical_json(moved_anchor.into())?);
+        finding.2[1].body = "Does the regression cover zero?".into();
+        finding.2[1].author = ReviewerId::try_from("6".to_owned())?;
+        finding.2.push(note("202", "5", "One more case.", None)?);
+        Ok(())
+    })?;
+    assert_eq!(
+        current.owned_changes_since(&retained, &owned),
+        [
+            ConversationChange::ResolutionChanged {
+                discussion: id("finding")?,
+                retained: Resolution::Unresolved,
+                current: Resolution::Resolved,
+            },
+            ConversationChange::ResolutionChanged {
+                discussion: id("summary")?,
+                retained: Resolution::NotResolvable,
+                current: Resolution::Unresolved,
+            },
+            ConversationChange::NoteAdded {
+                discussion: id("finding")?,
+                note: id("202")?,
+            },
+            ConversationChange::NoteAdded {
+                discussion: id("summary")?,
+                note: id("101")?,
+            },
+            ConversationChange::NoteAuthorChanged(id("201")?),
+            ConversationChange::NoteBodyChanged(id("100")?),
+            ConversationChange::NoteBodyChanged(id("201")?),
+            ConversationChange::NotePositionChanged(id("200")?),
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn removed_owned_threads_and_notes_moved_across_the_boundary_stay_in_scope() -> TestResult {
+    let (retained, owned) = reviewed()?;
+    let current = rebuild(&retained, |parts| {
+        let summary = parts.remove(0);
+        let question = parts[0].2.remove(1);
+        parts[1].2.push(question);
+        let foreign_root = parts[1].2.remove(0);
+        parts[0].2.push(foreign_root);
+        parts.push((id("summary-copy")?, Resolution::NotResolvable, summary.2));
+        Ok(())
+    })?;
+    assert_eq!(
+        current.owned_changes_since(&retained, &owned),
+        [
+            ConversationChange::DiscussionAdded(id("summary-copy")?),
+            ConversationChange::DiscussionRemoved(id("summary")?),
+            ConversationChange::NoteMoved {
+                note: id("100")?,
+                retained: id("summary")?,
+                current: id("summary-copy")?,
+            },
+            ConversationChange::NoteMoved {
+                note: id("201")?,
+                retained: id("finding")?,
+                current: id("foreign")?,
+            },
+            ConversationChange::NoteMoved {
+                note: id("300")?,
+                retained: id("foreign")?,
+                current: id("finding")?,
+            },
+        ]
+    );
+    let without_finding = rebuild(&retained, |parts| {
+        parts.remove(1);
+        Ok(())
+    })?;
+    assert_eq!(
+        without_finding.owned_changes_since(&retained, &owned),
+        [
+            ConversationChange::DiscussionRemoved(id("finding")?),
+            ConversationChange::NoteRemoved {
+                discussion: id("finding")?,
+                note: id("200")?,
+            },
+            ConversationChange::NoteRemoved {
+                discussion: id("finding")?,
+                note: id("201")?,
+            },
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn a_thread_owned_only_in_the_current_history_is_in_scope() -> TestResult {
+    let (retained, _) = reviewed()?;
+    let current = rebuild(&retained, |parts| {
+        parts.push((
+            id("new-summary")?,
+            Resolution::NotResolvable,
+            vec![note("700", "42", "Another run's summary.", None)?],
+        ));
+        parts.push((
+            id("new-finding")?,
+            Resolution::Unresolved,
+            vec![note("800", "42", "Another run's finding.", Some(ANCHOR))?],
+        ));
+        Ok(())
+    })?;
+    let owned = OwnedThreads {
+        summary_notes: BTreeSet::from([id("700")?]),
+        finding_discussions: BTreeSet::from([id("new-finding")?]),
+    };
+    assert_eq!(
+        current.owned_changes_since(&retained, &owned),
+        [
+            ConversationChange::DiscussionAdded(id("new-finding")?),
+            ConversationChange::DiscussionAdded(id("new-summary")?),
+            ConversationChange::NoteAdded {
+                discussion: id("new-finding")?,
+                note: id("800")?,
+            },
+            ConversationChange::NoteAdded {
+                discussion: id("new-summary")?,
+                note: id("700")?,
+            },
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn without_owned_threads_only_a_different_subject_is_reported() -> TestResult {
+    let (retained, _) = reviewed()?;
+    let edited = rebuild(&retained, |parts| {
+        parts[1].1 = Resolution::Resolved;
+        parts[1].2.push(note("202", "5", "One more case.", None)?);
+        parts.remove(0);
+        Ok(())
+    })?;
+    let none = OwnedThreads::default();
+    let same = with_text(&edited, subject(1)?, "New title", "New description")?;
+    assert!(!same.changes_since(&retained).is_empty());
+    assert_eq!(same.owned_changes_since(&retained, &none), []);
+    let other = with_text(&edited, subject(2)?, "New title", "New description")?;
+    assert_eq!(
+        other.owned_changes_since(&retained, &none),
+        [ConversationChange::Subject]
+    );
+    Ok(())
+}

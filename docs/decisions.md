@@ -147,7 +147,12 @@ defines continuation limits. The [CLI reference](../crates/bin/cli/README.md#pro
   tell reusable confirmations from earlier unenforced validation without reading local role records.
 - Limit private `local_context` to 2000 characters of pointers and decisive facts.
 - Capture the supported merge-request conversation as context only.
-  Before the first possible dispatch, require the current revision and normalized conversation to equal the capture.
+  Before the first possible dispatch, require the current revision to equal the capture and the reviewer's own threads to be unchanged:
+  the discussion of its owned summary and its owned finding threads, as discovery verifies them from the API author and corroborated markers.
+  Any change inside those threads blocks, because publication updates, answers, resolves or reopens them.
+  Other people's and bots' notes, threads and resolutions, and title or description edits, do not block; publication never writes to them.
+  Comparing the whole conversation is rejected: a later comment by another person or a bot then stops publication
+  and forces a fresh assessment, which can reverse confirmed findings.
   Publication communicates the assessed snapshot, not later events.
 - Bind publication to one run in journal version 3, `publication-progress.json`.
   The binding names the run's accepted assessment and captured-file hashes and is installed with the first prepared write.

@@ -173,6 +173,22 @@ The aggregate offline checker uses the same source-check selection.
 Unchanged carried roots keep their existing thread targets.
 Closed findings can retain historical source evidence without a current diff anchor.
 
+## Conversation context and freshness
+
+`conversation::Conversation` holds the merge-request title, description and every discussion with a supported non-system note.
+It is review context; it grants no finding identity, reply authority, policy selection or effect authority.
+`Conversation::changes_since` lists every difference from a retained capture, ignoring order and observation time.
+
+Publication freshness uses `Conversation::owned_changes_since` with `OwnedThreads`.
+`OwnedThreads::of` collects each history's owned summary notes and finding root discussions that its reviewer authored.
+Discovery verifies those records from the API author and corroborated markers, so a copied marker in another author's note adds nothing.
+In scope are the owned finding discussions and every discussion that holds an owned summary note in either conversation.
+Every change in scope is reported, whoever made it: publication updates, answers, resolves and reopens those threads.
+A different subject is always reported. Title, description and other discussions are out of scope.
+Callers pass the history captured with the retained conversation and the current discovery.
+A thread owned at capture then stays in scope after it disappears, and a thread the reviewer created after capture enters scope.
+The [conversation tests](src/conversation/tests.rs) and [published-history tests](tests/review_workflow/conversation_freshness.rs) cover these rules.
+
 ## Rendering and summary projection
 
 `ReviewRenderer` validates its trusted profile and projected inputs against their schemas.

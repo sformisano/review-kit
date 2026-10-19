@@ -24,6 +24,7 @@ fn managed_gitlab_suite() {
     workflows::fork_source_and_paginated_notes_use_the_correct_project(&service);
     workflows::modified_binary_source_remains_explicit_in_retained_capture(&service);
     conversation::conversation_capture_matches_independent_rest_reads(&service);
+    conversation::owned_thread_scope_follows_verified_discovery(&service);
 }
 
 fn external_service() -> service::GitLabService {
@@ -75,6 +76,12 @@ fn modified_binary_source_remains_explicit_in_retained_capture() {
 #[ignore = "requires an external local GitLab server and administrator credential"]
 fn conversation_capture_matches_independent_rest_reads() {
     conversation::conversation_capture_matches_independent_rest_reads(&external_service());
+}
+
+#[test]
+#[ignore = "requires an external local GitLab server and administrator credential"]
+fn owned_thread_scope_follows_verified_discovery() {
+    conversation::owned_thread_scope_follows_verified_discovery(&external_service());
 }
 
 #[test]

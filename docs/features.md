@@ -119,7 +119,10 @@ Preflight validation, profile assets, and bodies whose inputs are available befo
 Render dependent bodies when verified provider references become available, before writing those bodies.
 The [architecture](architecture.md) explains the dependency and partial-publication limit.
 Discover current owned state before deriving effects.
-Before the first possible dispatch, require the current revision and supported conversation to equal the run's capture.
+Before the first possible dispatch, require the current revision to equal the run's capture
+and the reviewer's own threads to be unchanged since it: the owned summary's discussion and the owned finding threads.
+Any change inside those threads blocks, whoever made it.
+Comments, threads and resolution changes by other people or bots, and title or description edits, do not block.
 Publish the assessed snapshot, not later events.
 Record a pending round before authorized finding effects.
 An identical pending summary needs verification without another write.

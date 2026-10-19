@@ -5,15 +5,19 @@
 //! managed finding identity, reply authority, policy selection or effect
 //! authority.
 //!
-//! Freshness compares the normalized view. Discussions and notes are ordered by
+//! Comparison uses the normalized view. Discussions and notes are ordered by
 //! identifier and positions compare as canonical JSON text. Observation time and
 //! provider ordering are not part of the model.
+//!
+//! Publication freshness considers only [`OwnedThreads`]: the discussions where
+//! publication writes. Activity elsewhere, including title and description
+//! edits, does not make an assessed snapshot stale.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use review_kit_domain::{ReviewerId, Subject};
 
-use crate::publication::ProviderId;
+use crate::publication::{ProviderId, Snapshot};
 
 /// Canonical JSON text of one provider position object.
 ///
@@ -142,7 +146,7 @@ impl Discussion {
 ///
 /// Discussion identifiers are unique, and note identifiers are unique across
 /// all discussions. Structural equality (`==`) also compares retained order;
-/// freshness checks use [`Conversation::changes_since`] or the normalized view.
+/// comparisons use [`Conversation::changes_since`] or the normalized view.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Conversation {
     subject: Subject,
@@ -295,6 +299,50 @@ impl Conversation {
         self.changes_since(other).is_empty()
     }
 
+    /// The changes from `retained` inside `owned` threads, in a stable order.
+    ///
+    /// A discussion is in scope when it is an owned finding discussion or
+    /// holds an owned summary note in either conversation, so a thread owned
+    /// at capture stays in scope after it disappears. A note-level change is in
+    /// scope when the note's discussion in either conversation is. Every
+    /// change in scope is reported, whoever made it, because publication can
+    /// update, answer, resolve or reopen those threads. A different review
+    /// subject is always reported. Title, description and other discussions
+    /// are out of scope.
+    pub fn owned_changes_since(
+        &self,
+        retained: &Self,
+        owned: &OwnedThreads,
+    ) -> Vec<ConversationChange> {
+        let scope = owned.discussions_in([retained, self]);
+        let before = retained.notes_by_id();
+        let after = self.notes_by_id();
+        let note_in_scope = |note: &ProviderId| {
+            [before.get(note), after.get(note)]
+                .into_iter()
+                .flatten()
+                .any(|(discussion, _)| scope.contains(*discussion))
+        };
+        self.changes_since(retained)
+            .into_iter()
+            .filter(|change| match change {
+                ConversationChange::Subject => true,
+                ConversationChange::Title | ConversationChange::Description => false,
+                ConversationChange::DiscussionAdded(discussion)
+                | ConversationChange::DiscussionRemoved(discussion)
+                | ConversationChange::ResolutionChanged { discussion, .. }
+                | ConversationChange::NoteAdded { discussion, .. }
+                | ConversationChange::NoteRemoved { discussion, .. } => scope.contains(discussion),
+                ConversationChange::NoteMoved {
+                    retained, current, ..
+                } => scope.contains(retained) || scope.contains(current),
+                ConversationChange::NoteAuthorChanged(note)
+                | ConversationChange::NoteBodyChanged(note)
+                | ConversationChange::NotePositionChanged(note) => note_in_scope(note),
+            })
+            .collect()
+    }
+
     fn discussions_by_id(&self) -> BTreeMap<&ProviderId, &Discussion> {
         self.discussions
             .iter()
@@ -312,6 +360,72 @@ impl Conversation {
                     .map(move |note| (&note.id, (&discussion.id, note)))
             })
             .collect()
+    }
+}
+
+/// The reviewer's threads in verified managed history: owned summary notes
+/// and owned finding root discussions.
+///
+/// Publication writes only there. It updates the summary note, and it replies
+/// in, resolves and reopens finding threads. Discovery establishes these
+/// records from the authenticated API author and corroborated markers, so a
+/// marker copied into another author's note never makes a thread owned.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct OwnedThreads {
+    summary_notes: BTreeSet<ProviderId>,
+    finding_discussions: BTreeSet<ProviderId>,
+}
+
+impl OwnedThreads {
+    /// The threads that each history's own reviewer authored.
+    ///
+    /// Each history is a verified discovery of the conversation's subject for
+    /// the publishing reviewer. Publication passes the history captured with
+    /// the retained conversation and the current discovery, so threads that
+    /// the reviewer created after capture are owned too.
+    pub fn of<'a>(histories: impl IntoIterator<Item = &'a Snapshot>) -> Self {
+        let mut owned = Self::default();
+        for history in histories {
+            owned.summary_notes.extend(
+                history
+                    .summaries
+                    .iter()
+                    .filter(|summary| summary.author == history.reviewer)
+                    .map(|summary| summary.id.clone()),
+            );
+            owned.finding_discussions.extend(
+                history
+                    .findings
+                    .iter()
+                    .filter(|root| root.author == history.reviewer)
+                    .map(|root| root.id.clone()),
+            );
+        }
+        owned
+    }
+
+    /// Owned finding discussions, and each discussion of `conversations` that
+    /// holds an owned summary note.
+    fn discussions_in<'a>(
+        &'a self,
+        conversations: [&'a Conversation; 2],
+    ) -> BTreeSet<&'a ProviderId> {
+        let mut scope: BTreeSet<&ProviderId> = self.finding_discussions.iter().collect();
+        for conversation in conversations {
+            scope.extend(
+                conversation
+                    .discussions
+                    .iter()
+                    .filter(|discussion| {
+                        discussion
+                            .notes
+                            .iter()
+                            .any(|note| self.summary_notes.contains(&note.id))
+                    })
+                    .map(|discussion| &discussion.id),
+            );
+        }
+        scope
     }
 }
 

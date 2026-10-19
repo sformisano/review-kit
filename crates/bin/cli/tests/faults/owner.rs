@@ -10,25 +10,6 @@ use super::{
     server::{Fault, MR_PATH, Response},
 };
 
-#[derive(Clone, Copy, Debug)]
-enum Change {
-    Head,
-    Conversation,
-}
-
-fn change(harness: &Harness, change: Change) -> &'static str {
-    match change {
-        Change::Head => {
-            harness.push_commit();
-            "source_changed"
-        }
-        Change::Conversation => {
-            harness.add_comment("question-thread", "Does the cause survive the new path?");
-            "conversation_changed"
-        }
-    }
-}
-
 /// How the owner's binding came to have no possible provider write.
 #[derive(Clone, Copy, Debug)]
 enum Unsent {
@@ -76,14 +57,16 @@ fn unsent_owner(harness: &Harness, unsent: Unsent) -> String {
     owner
 }
 
-fn yields_to_a_fresh_run(kind: Change, unsent: Unsent) {
+/// After the owner's crash the head moves, so the owner can no longer publish
+/// and a fresh run releases its binding.
+fn yields_to_a_fresh_run(unsent: Unsent) {
     let harness = Harness::new();
     let owner = unsent_owner(&harness, unsent);
     let pending = harness.journal();
     let status = harness.ok(&["status"]);
     assert_eq!(
         status["journal"]["publication_status"], "bound_unsent",
-        "{kind:?} {unsent:?}"
+        "{unsent:?}"
     );
     assert_eq!(status["journal"]["provider_write_possible"], false);
     assert!(
@@ -99,9 +82,9 @@ fn yields_to_a_fresh_run(kind: Change, unsent: Unsent) {
         "publication_pending_owner",
     );
     assert_eq!(refused["diagnostics"][0]["provider_write_possible"], false);
-    let code = change(&harness, kind);
+    harness.push_commit();
     let writes = harness.writes();
-    let failed = harness.fails(&["publish", "--effects", "review"], 3, code);
+    let failed = harness.fails(&["publish", "--effects", "review"], 3, "source_changed");
     assert!(
         failed["diagnostics"][0]["next"]
             .as_str()
@@ -109,7 +92,7 @@ fn yields_to_a_fresh_run(kind: Change, unsent: Unsent) {
             .contains("rkc run start --new"),
         "{failed:#}"
     );
-    assert_eq!(harness.writes(), writes, "{kind:?} {unsent:?}");
+    assert_eq!(harness.writes(), writes, "{unsent:?}");
     let journal = harness.journal();
     assert_eq!(journal["coverage_binding"]["run_id"], owner);
     assert_eq!(journal["unresolved"], pending["unresolved"]);
@@ -148,7 +131,7 @@ fn yields_to_a_fresh_run(kind: Change, unsent: Unsent) {
 
     let notes = harness.writes_to("POST", "/merge_requests/7/notes");
     let published = harness.ok(&["publish", "--effects", "review"]);
-    assert_eq!(published["status"], "settled", "{kind:?}: {published:#}");
+    assert_eq!(published["status"], "settled", "{published:#}");
     let journal = harness.journal();
     assert_eq!(journal["coverage_binding"]["run_id"], fresh);
     assert_eq!(journal["unresolved"], json!(null));
@@ -166,7 +149,7 @@ fn yields_to_a_fresh_run(kind: Change, unsent: Unsent) {
             .unwrap()
             .len(),
         6,
-        "{kind:?}: the fresh run is not capped by the earlier two-effect grant"
+        "the fresh run is not capped by the earlier two-effect grant"
     );
 
     harness.ok(&["run", "select", &owner]);
@@ -174,21 +157,109 @@ fn yields_to_a_fresh_run(kind: Change, unsent: Unsent) {
     assert_ne!(status["journal"]["publication_owner"], json!(owner));
     assert_eq!(status["journal"]["publication_status"], Value::Null);
     let stopped = harness.ok(&["run", "stop", "--reason", "Superseded by a fresh run."]);
-    assert_eq!(stopped["status"], "stopped", "{kind:?}");
+    assert_eq!(stopped["status"], "stopped");
 }
 
 #[test]
 fn an_owner_with_only_prepared_intent_yields_to_a_fresh_run_after_the_merge_request_changes() {
-    for kind in [Change::Head, Change::Conversation] {
-        yields_to_a_fresh_run(kind, Unsent::Prepared);
-    }
+    yields_to_a_fresh_run(Unsent::Prepared);
 }
 
 #[test]
 fn an_owner_without_intent_after_a_rejected_resend_yields_to_a_fresh_run() {
-    for kind in [Change::Head, Change::Conversation] {
-        yields_to_a_fresh_run(kind, Unsent::Rejected);
-    }
+    yields_to_a_fresh_run(Unsent::Rejected);
+}
+
+/// Comments outside the reviewer's threads do not stop the owner from resuming
+/// a publication of which nothing reached GitLab.
+#[test]
+fn an_unsent_owner_resumes_its_publication_past_foreign_comments() {
+    let harness = Harness::new();
+    let owner = harness.accepted_with_finding();
+    crash(
+        &harness,
+        "publish.after_intent:1",
+        &["publish", "--effects", "review"],
+    );
+    let journal = harness.journal();
+    assert_eq!(journal["coverage_binding"]["run_id"], owner);
+    assert_eq!(journal["dispatch_may_have_started"], false);
+    assert_eq!(journal["unresolved"]["phase"], "prepared");
+    harness.add_comment("question-thread", "Does the cause survive the new path?");
+    harness.http.state.lock().unwrap().description = Some(json!("Edited after the crash."));
+    let foreign = harness.http.state.lock().unwrap().discussions.clone();
+    let recovered = harness.ok(&["publish", "--effects", "review"]);
+    assert_eq!(recovered["status"], "settled", "{recovered:#}");
+    assert_eq!(recovered["recovery"], true);
+    assert_eq!(harness.manifest(&owner)["completion"], "published");
+    assert_eq!(harness.writes_to("POST", "/merge_requests/7/notes"), 1);
+    assert_eq!(
+        harness.writes_to("POST", "/merge_requests/7/discussions"),
+        1
+    );
+    let state = harness.http.state.lock().unwrap();
+    assert_eq!(
+        state.discussions[0], foreign[0],
+        "the foreign comment is untouched"
+    );
+}
+
+/// A follow-up owner whose own finding thread gained a reply after its crash
+/// cannot publish its assessed snapshot; a fresh run releases its binding.
+#[test]
+fn an_unsent_follow_up_owner_whose_own_thread_changed_yields_to_a_fresh_run() {
+    let harness = Harness::new();
+    harness.accepted_with_finding();
+    harness.ok(&["publish", "--effects", "review"]);
+    let owner = harness.follow_up_in(&harness.repo, false);
+    crash(
+        &harness,
+        "publish.after_intent:1",
+        &["publish", "--effects", "review"],
+    );
+    let pending = harness.journal();
+    assert_eq!(pending["coverage_binding"]["run_id"], owner);
+    assert_eq!(pending["dispatch_may_have_started"], false);
+    assert_eq!(pending["unresolved"]["phase"], "prepared");
+    let question = harness
+        .http
+        .state
+        .lock()
+        .unwrap()
+        .question("discussion-1", "Is the cause still lost?");
+    let writes = harness.writes();
+    let failed = harness.fails(
+        &["publish", "--effects", "review"],
+        3,
+        "conversation_changed",
+    );
+    assert_eq!(
+        failed["diagnostics"][0]["changes"],
+        json!([{"kind": "note_added", "discussion": "discussion-1", "note": question.to_string()}]),
+        "{failed:#}"
+    );
+    assert!(
+        failed["diagnostics"][0]["next"]
+            .as_str()
+            .unwrap()
+            .contains("rkc run start --new"),
+        "{failed:#}"
+    );
+    assert_eq!(harness.writes(), writes);
+    let journal = harness.journal();
+    assert_eq!(journal["coverage_binding"]["run_id"], owner);
+    assert_eq!(journal["unresolved"], pending["unresolved"]);
+
+    let fresh = harness.follow_up_in(&harness.repo, true);
+    let planned = harness.ok(&["publish", "--effects", "review", "--plan"]);
+    assert_eq!(planned["publication_owner_released"], json!(owner));
+    assert_eq!(harness.writes(), writes, "planning writes nothing");
+    let published = harness.ok(&["publish", "--effects", "review"]);
+    assert_eq!(published["status"], "settled", "{published:#}");
+    assert_eq!(harness.journal()["coverage_binding"]["run_id"], fresh);
+    harness.ok(&["run", "select", &owner]);
+    let stopped = harness.ok(&["run", "stop", "--reason", "Superseded by a fresh run."]);
+    assert_eq!(stopped["status"], "stopped");
 }
 
 /// Guidance for a possibly dispatched creation that the new head prevents
@@ -210,7 +281,7 @@ fn an_owner_that_may_have_dispatched_keeps_uncertainty_and_blocks_replacement_af
         "publish.after_dispatch_flag:1",
         &["publish", "--effects", "review"],
     );
-    change(&harness, Change::Head);
+    harness.push_commit();
     let before = harness.journal();
     let (output, recovered) = harness.rkc(&["publish", "--effects", "review"]);
     assert!(!output.status.success(), "{recovered:#}");
@@ -260,7 +331,7 @@ fn an_owner_that_may_have_dispatched_reconciles_despite_a_later_comment() {
         "publish.after_dispatch_flag:1",
         &["publish", "--effects", "review"],
     );
-    change(&harness, Change::Conversation);
+    harness.add_comment("question-thread", "Does the cause survive the new path?");
     let recovered = harness.ok(&["publish", "--effects", "review"]);
     assert_eq!(recovered["status"], "settled", "{recovered:#}");
     assert_eq!(harness.manifest(&owner)["completion"], "published");

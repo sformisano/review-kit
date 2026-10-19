@@ -274,7 +274,7 @@ uses it; nothing is read or written through the link.
 | `review-runs/<run-id>/review-context.json` | rkc capture | Comparison, verified managed history and observed permissions |
 | `review-runs/<run-id>/reviewed-source.json` | rkc capture | Provider diff data and committed file contents |
 | `review-runs/<run-id>/merge-request.diff` | rkc capture | Readable unified diff |
-| `review-runs/<run-id>/review-conversation.json` | rkc capture | Title, description and supported discussions |
+| `review-runs/<run-id>/review-conversation.json` | rkc capture | Title, description and supported discussions, as review context |
 | `review-runs/<run-id>/review-assessment.draft.json` | rkc, then the agent | [Assessment](#assessment-editing) draft |
 | `review-runs/<run-id>/accepted/<hex>/review-assessment.json` | rkc | Frozen accepted bytes |
 | `review-runs/<run-id>/draft-history/<hex>/<draft file>` | rkc | Exact draft bytes archived by `revise` |
@@ -548,7 +548,7 @@ The captured prior findings remain authoritative.
 It archives and discards unaccepted edits.
 Without regeneration, malformed drafts fail with `malformed_draft` and remain unchanged.
 A run owning unfinished publication cannot revise or accept a successor.
-Changed source or conversation requires a new capture, not a revision.
+Changed source or changed reviewer threads require a new capture, not a revision.
 
 ## Publication and recovery
 
@@ -598,10 +598,21 @@ in the document. It says that the round continues only with that exact profile,
 selected with `--render-profile PATH` or `render_profile` until the round
 finishes ([rendering profiles](../../../docs/render-profiles.md#recover-an-interrupted-attempt)).
 Before the first write could reach the provider, the current head and comparison
-must equal the run's revision (`source_changed`) and the current supported
-conversation must equal the retained one, ignoring order and capture time
-(`conversation_changed`). Start a new run for either change. Publication
-communicates the assessed snapshot, not later events.
+must equal the run's revision (`source_changed`). The reviewer's own threads
+must also be unchanged since capture (`conversation_changed`). They are the
+discussion of the owned summary note and each owned finding thread, where
+publication updates, answers, resolves or reopens. Discovery identifies them in
+the run's retained history and in the current one, by API author and
+corroborated Review Kit markers; a marker copied into another author's note
+grants no ownership. Inside those threads, any added, removed, edited or moved
+note and any resolution change blocks, whoever made it. Order and capture time
+are ignored. The diagnostic's `changes` lists only these owned-thread changes.
+Notes, threads and resolutions owned by other people or bots, and title or
+description edits, do not block, and publication never writes to them. While
+the reviewer has no summary or finding thread on the merge request, only a
+source change blocks. Start a new run after either refusal. A deleted finding thread fails discovery first with
+[`managed_history_conflict`](#output-and-exit-status). Publication communicates
+the assessed snapshot, not later events.
 
 Publication holds the workspace lock, then the subject/reviewer journal lock
 (`publication_busy` when held). Its durable order is: read the journal; discover
@@ -661,7 +672,7 @@ While another run owns unfinished publication, other runs can draft, accept and
 finish locally, but their planning and publication fail with
 `publication_pending_owner` naming the owner in `owner_run_id`. This check reads
 the journal after discovery and before the freshness preflight, so it also
-applies when the owner's partial publication changed the conversation; its
+applies when the owner's partial publication changed the reviewer's threads; its
 `next` says how to recover the owner. Recover the owner first:
 
 ```sh
@@ -670,8 +681,9 @@ rkc run select <owner run ID>
 rkc publish --effects review
 ```
 
-A run captured before the owner's publication changed the merge request then
-fails `conversation_changed` or `source_changed`; start a fresh run.
+A run captured before the owner's publication changed the reviewer's threads
+then fails `conversation_changed`, or `source_changed` after a new head; start a
+fresh run.
 
 When the owner has no unresolved write and the provider shows its bound round
 terminal, the next run's publication records that settlement and proceeds.
@@ -681,7 +693,7 @@ releases that binding and restores the earlier effect ceiling, so the new run is
 not limited by the owner's grant. That run's `--plan` reads the journal as the
 release would leave it, without changing the journal, and names the owner in
 `publication_owner_released`. This is the way forward when the owner's source
-or conversation changed after a crash:
+or own threads changed after a crash:
 
 ```sh
 rkc run start --new
@@ -825,7 +837,7 @@ and verified effects; [result inspection](#result-inspection) shows how to read 
 | --- | --- | --- |
 | `0` | Success; inspect publication status | `already_settled` |
 | `2` | Invalid arguments, configuration, environment, input or rendering | `arguments`, `configuration`, `discovery`, `not_in_git_worktree`, `runtime_tracked`, `runtime_redirected`, `runtime_unrecognized`, `no_selected_run`, `invalid_run_id`, `run_missing`, `run_file_missing`, `run_identity_mismatch`, `identity_mismatch`, `repository_mismatch`, `hash_mismatch`, `accepted_snapshot_missing`, `invalid_accepted_snapshot`, `invalid_run_document`, `assessment_not_accepted`, `dirty_draft`, `blank_reason`, `render_profile_changed` |
-| `3` | Reviewed source or conversation changed before dispatch, or the revision changed during publication or recovery | `source_changed`, `conversation_changed`, `changed_revision`, `discovery`, `gitlab` |
+| `3` | Reviewed source or the reviewer's own threads changed before dispatch, or the revision changed during publication or recovery | `source_changed`, `conversation_changed`, `changed_revision`, `discovery`, `gitlab` |
 | `4` | Reviewer or authority mismatch | `wrong_reviewer`, `discovery` |
 | `5` | Busy locks, run, journal or managed history state conflicts | `workspace_busy`, `publication_busy`, `open_run_exists`, `run_terminal`, `publication_pending_owner`, `binding_mismatch`, `no_unfinished_publication`, `journal_unavailable`, `journal_missing`, `run_journal_exists`, `settlement_conflict`, `managed_history_conflict`, `discovery`, `gitlab` |
 | `6` | Unknown write, unresolved intent or readback mismatch | publication `stop` diagnostics |

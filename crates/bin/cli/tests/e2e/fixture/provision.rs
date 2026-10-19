@@ -41,6 +41,19 @@ pub fn issue_token(admin: &Api, user: &Value, scope: &str) -> Result<String> {
         .to_owned())
 }
 
+/// Issues a seven-day Developer project access token with `api` scope; GitLab
+/// creates its bot user. Returns the token record with `user_id` and `token`.
+#[allow(dead_code, reason = "used by live freshness scenarios")]
+pub fn issue_project_token(admin: &Api, project: &Value, name: &str) -> Result<Value> {
+    let date = (OffsetDateTime::now_utc() + time::Duration::days(7))
+        .date()
+        .to_string();
+    admin.post(
+        &format!("projects/{project}/access_tokens"),
+        &json!({"name": name, "scopes": ["api"], "access_level": 30, "expires_at": date}),
+    )
+}
+
 /// Waits until the merge request reports `head` and GitLab has collected a
 /// diff version for it. With `start`, the version must also compare against
 /// that target commit, which distinguishes a retargeted comparison from an
