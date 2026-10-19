@@ -26,11 +26,11 @@ Review Kit does not analyze code for bugs.
 
 ## Install and run
 
-Download the **Linux x86-64 binary** from [Releases](https://github.com/sformisano/review-kit/releases/tag/v0.1.0).
+Download the **Linux x86-64 binary** from [Releases](https://github.com/sformisano/review-kit/releases/tag/v0.1.1).
 The [installation guide](docs/distribution.md#download-and-install) covers build identity,
 download verification, installation, upgrades and rollback. The binary includes its rendering templates
 and schemas; it needs no Rust installation or separate json2md executable.
-The [0.1.0 release notes](docs/releases/0.1.0.md) describe that binary.
+The [0.1.1 release notes](docs/releases/0.1.1.md) describe that binary.
 
 From a checkout of this repository, with Rust 1.98 or later:
 
@@ -41,7 +41,7 @@ rkc --help
 
 Cargo's binary directory must be on your `PATH`.
 
-See the [platform limits](docs/releases/0.1.0.md#scope-and-limits) for verified
+See the [platform limits](docs/releases/0.1.1.md#verification-and-limits) for verified
 Linux and GitLab versions.
 
 ## CLI usage

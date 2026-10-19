@@ -1,7 +1,7 @@
 # Binary releases
 
 Review Kit packages `rkc` with its source, documentation, renderer assets and license notices.
-Version `0.1.0` is distributed through [GitHub Releases](https://github.com/sformisano/review-kit/releases/tag/v0.1.0).
+Version `0.1.1` is distributed through [GitHub Releases](https://github.com/sformisano/review-kit/releases/tag/v0.1.1).
 The crates are not published on crates.io, and no Homebrew package is provided.
 
 The binary target is `x86_64-unknown-linux-gnu`.
@@ -35,7 +35,7 @@ From the repository root, set a new local output path:
 
 ```sh
 set -e
-release_output="$HOME/review-kit-0.1.0-build"
+release_output="$HOME/review-kit-0.1.1-build"
 bash scripts/build-linux.sh "$release_output"
 ```
 
@@ -82,8 +82,8 @@ Download the archive and its checksum file into a fresh directory:
 
 ```sh
 set -e
-release_url=https://github.com/sformisano/review-kit/releases/download/v0.1.0
-curl --fail --location --remote-name "$release_url/review-kit-0.1.0-x86_64-unknown-linux-gnu.tar.gz"
+release_url=https://github.com/sformisano/review-kit/releases/download/v0.1.1
+curl --fail --location --remote-name "$release_url/review-kit-0.1.1-x86_64-unknown-linux-gnu.tar.gz"
 curl --fail --location --remote-name "$release_url/SHA256SUMS"
 ```
 
@@ -92,8 +92,8 @@ Verify the archive and its extracted files. These commands require Python 3.9 or
 ```sh
 set -e
 sha256sum --check SHA256SUMS
-tar -xzf review-kit-0.1.0-x86_64-unknown-linux-gnu.tar.gz
-cd review-kit-0.1.0-x86_64-unknown-linux-gnu
+tar -xzf review-kit-0.1.1-x86_64-unknown-linux-gnu.tar.gz
+cd review-kit-0.1.1-x86_64-unknown-linux-gnu
 python3 - <<'PY'
 import hashlib, json
 from pathlib import Path
@@ -107,9 +107,9 @@ PY
 ./rkc --help
 ```
 
-The version command returns `rkc 0.1.0`.
+The version command returns `rkc 0.1.1`.
 Read `BUILD.json` for the [build identity](#build-identity).
-Read [the release notes](releases/0.1.0.md) before installation.
+Read [the release notes](releases/0.1.1.md) before installation.
 The executable embeds rendering schemas and templates.
 Runtime operation requires no source checkout, separate json2md executable or Rust installation.
 
@@ -118,7 +118,7 @@ Install the complete package under a directory named for its version and source 
 ```sh
 set -e
 release_commit=$(python3 -c 'import json; print(json.load(open("BUILD.json"))["source_commit"])')
-release_home="$HOME/.local/opt/review-kit/0.1.0-$release_commit"
+release_home="$HOME/.local/opt/review-kit/0.1.1-$release_commit"
 mkdir -p "$HOME/.local/opt/review-kit" "$HOME/.local/bin"
 test ! -e "$release_home"
 cp -a . "$release_home"
@@ -189,13 +189,13 @@ The following checks gate distribution:
 2. Run the pinned [GitLab CE suite](../tests/gitlab/README.md) and [CLI suite](../tests/cli/README.md).
 3. Build the archive and verify its final extracted bytes outside the checkout.
 4. Test installation, upgrade and rollback against supported documents and retained progress.
-5. Review project licenses, third-party notices and [release limitations](releases/0.1.0.md).
+5. Review project licenses, third-party notices and [release limitations](releases/0.1.1.md#verification-and-limits).
 
 Unknown or failing checks block distribution. An unavailable live server check remains a proof gap.
 GitHub provider support and other operating systems remain outside this release's scope.
 
 Use the repository URL from workspace package metadata as the hosting identity.
-Point `v0.1.0` at the archive's exact source commit.
+Point `v0.1.1` at the archive's exact source commit.
 Upload the verified archive and its matching `SHA256SUMS` together.
 Download both assets through the public release URLs without authentication.
 Repeat checksum, extraction, executable and fixture checks against those downloaded bytes.

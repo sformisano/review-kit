@@ -69,7 +69,7 @@ Review Kit makes no drop-in compatibility promise for other review tools.
 
 ## Distribution and support limits
 
-The [binary release guide](distribution.md) defines the `0.1.0` Linux x86-64
+The [binary release guide](distribution.md) defines the `0.1.1` Linux x86-64
 package, license notices, installation, upgrade and rollback procedures.
 Archive assembly binds artifacts to a clean source commit and records checksums.
 The [distribution gates](distribution.md#distribution-gates) require checks against

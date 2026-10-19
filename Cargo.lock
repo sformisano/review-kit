@@ -2354,7 +2354,7 @@ dependencies = [
 
 [[package]]
 name = "review-kit-application"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "displaydoc",
  "review-kit-domain",
@@ -2366,7 +2366,7 @@ dependencies = [
 
 [[package]]
 name = "review-kit-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -2400,7 +2400,7 @@ dependencies = [
 
 [[package]]
 name = "review-kit-domain"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "displaydoc",
  "thiserror",
@@ -2408,7 +2408,7 @@ dependencies = [
 
 [[package]]
 name = "review-kit-filesystem-adapter"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "displaydoc",
  "libc",
@@ -2425,7 +2425,7 @@ dependencies = [
 
 [[package]]
 name = "review-kit-gitlab-adapter"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "derive_more",
  "displaydoc",
@@ -2447,7 +2447,7 @@ dependencies = [
 
 [[package]]
 name = "review-kit-json-adapter"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "displaydoc",
  "jsonschema",
@@ -2462,7 +2462,7 @@ dependencies = [
 
 [[package]]
 name = "review-kit-json2md-adapter"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "displaydoc",
  "json2md",
@@ -2480,7 +2480,7 @@ dependencies = [
 
 [[package]]
 name = "review-kit-observation"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "redactable",
  "review-kit-observation-macros",
@@ -2494,7 +2494,7 @@ dependencies = [
 
 [[package]]
 name = "review-kit-observation-macros"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "proc-macro2",
  "quote",
