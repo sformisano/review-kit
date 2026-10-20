@@ -41,6 +41,7 @@ the [GitLab implementation](../crates/lib/infrastructure/gitlab-adapter/README.m
 | Can a new container publish a follow-up review without earlier state? | [Follow-up reviews in a new environment](../crates/bin/cli/README.md#follow-up-reviews-in-a-new-environment) |
 | How do I change comment formatting without rebuilding? | [Rendering profiles](render-profiles.md) |
 | How do I download, verify, install, upgrade or roll back a binary? | [Binary releases](distribution.md) |
+| What changed in 0.1.2, and how do I upgrade from 0.1.1? | [0.1.2 release notes](releases/0.1.2.md) |
 | What changed in 0.1.1, and how do I upgrade from 0.1.0? | [0.1.1 release notes](releases/0.1.1.md) |
 | What does 0.1.0 include? | [0.1.0 release notes](releases/0.1.0.md) |
 | What is implemented, and where does verification stop? | [Implementation status](plan.md) |
