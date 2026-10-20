@@ -174,7 +174,7 @@ Use a previous executable only after testing it against copies of the current do
 If it cannot read current progress, retain the current executable for recovery and stop publication.
 rkc 0.1.0 cannot read the version 2 `review-conversation.json` that rkc 0.1.1 and later write.
 The [captured conversation reference](../crates/bin/cli/README.md#captured-conversation) lists
-which 0.1.0 commands fail on such a run and when 0.1.0 blocks other runs.
+which 0.1.0 commands fail on such a run and when other runs stay blocked.
 Before rolling back to 0.1.0, finish or stop every run that the newer executable started.
 Keep the newer executable for any such run that owns unfinished publication and finish that publication with it first.
 An executable without review runs cannot read the run publication journal, as the

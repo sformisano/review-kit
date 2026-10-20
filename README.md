@@ -227,7 +227,7 @@ Later runs use the existing findings and discussions:
 | A completed assessment and its comments are unchanged | Verify the existing comments; write nothing, create no new round and complete the run as `no_changes` |
 
 The summary lists verified finding states and actions. Each earlier round has
-its own collapsed findings table, preserving the states communicated in that round.
+its own collapsed section, preserving the states communicated in that round.
 Review Kit manages comments and discussion state. It does not approve or merge
 requests, delete comments, or apply suggestions.
 

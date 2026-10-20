@@ -356,8 +356,9 @@ rkc that wrote it, or a later one.
 rkc 0.1.0 reads version 1 only. On a run that a newer rkc started, rkc 0.1.0
 `run list` and `run stop` still work, and `status` shows
 `retained_files.state: "damaged"`. Every other rkc 0.1.0 command that opens the
-run fails with `invalid_run_document`: `run select`, `check`, `accept`,
-`revise`, `run finish` and `publish` in every mode. When such a run owns
+run fails with exit `2`: `run select`, `check`, `accept`, `revise`, `run finish`
+and `publish` in every mode. The code is `invalid_run_document` when the
+captured conversation has a note, and `unsupported_version` when it has none. When such a run owns
 unfinished publication and one of its writes may have reached GitLab, rkc 0.1.0
 therefore cannot recover it. Planning and publication of every other run of the
 same merge request and reviewer then fail with `publication_pending_owner`
@@ -693,10 +694,10 @@ assessed snapshot is still current where it writes:
 | --- | --- |
 | A note added to, removed from, edited in, or moved into or out of a target thread, by anyone | Yes |
 | A resolution change of a target thread | Yes |
-| An edit or a move of the summary note, or a summary note created after capture | Yes |
+| An edit, a move or the removal of the summary note, or a summary note created after capture | Yes |
 | A reply in the summary note's discussion | No |
 | Any change in a finding thread of the reviewer that receives no planned effect | No |
-| Notes, threads and resolutions by other people or bots elsewhere | No |
+| Any other note, thread or resolution change outside the write targets, by anyone | No |
 | A title or description edit | No |
 | Another order of notes or discussions, or another capture time | No |
 
@@ -705,8 +706,8 @@ does not write where a change does not block; the next review assesses it.
 After either refusal, start a new run. A deleted summary note or finding thread
 fails discovery first with [`managed_history_conflict`](#output-and-exit-status).
 
-A first publication, before the reviewer has a summary, writes to no existing
-object, so only a source change blocks it. A plan that writes nothing, such as
+When the reviewer has no summary, at capture or now, publication writes to no
+existing object, so only a source change blocks it. A plan that writes nothing, such as
 an exact repeat of the current round, has no write targets either and settles
 as `no_changes` without writes.
 Publication communicates the assessed snapshot, not later events: its summary
@@ -951,8 +952,11 @@ Documents carry `version` and, for run commands, `command`, `status`, `run_id`,
 `run_directory` (relative to the worktree root) and `next` where they apply.
 Artifact paths such as `draft`, `path` and `archived_draft` are relative to the
 run directory. Failures use
-`{"version": 1, "status": "error", "diagnostics": [{"code", "message", "causes", ...}]}`;
-some diagnostics add fields such as `run_ids`, `owner_run_id`, `round`, `files`,
+`{"version": 1, "status": "error", "diagnostics": [{"code", "message", "causes", ...}]}`.
+A retained file that decodes but fails validation gives
+`{"version": 1, "status": "invalid", "diagnostics": [...]}` with exit `2`, for
+example `unsupported_version` or `invalid_value`. Some diagnostics add fields
+such as `run_ids`, `owner_run_id`, `round`, `files`,
 `drafts`, `stage` or `next`. The configured destination carries
 [structured redacted operation logs](../../lib/observation/README.md); see
 [logging preferences](#logging-preferences). Log delivery failures do not change
@@ -996,8 +1000,9 @@ GitLab could not list them:
 | `inconsistent_history` | Summary, finding or reply records disagree, or the retained summary data is invalid |
 
 When the reviewer's summary names a retained-state version that this executable
-does not read, the same commands stop with its own code,
-`unsupported_retained_state_version` (exit `5`). The diagnostic adds
+does not read, `run start`, planning, publication and abandonment stop with
+`unsupported_retained_state_version` (exit `5`) instead of
+`managed_history_conflict`. The diagnostic adds
 `state_version`, `supported_state_version` and `next`. Retain the provider
 records and use an executable that supports their version.
 
