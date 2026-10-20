@@ -32,8 +32,9 @@ current execution evidence.
 The application suite exercises failure and recovery through fake ports, including
 checkpoint rules, run binding, settlement and the release of unsent owners.
 Controlled HTTP tests exercise actual request mapping and transport outcomes.
-The local GitLab CE suite exercises real stored results, reviewer tokens and
-conversation capture on its pinned self-managed image.
+The local GitLab CE suite exercises real stored results, reviewer tokens,
+conversation capture with note author accounts and the write targets that
+freshness compares, on its pinned self-managed image.
 
 The ordinary workspace tests run each review-run command as a process against
 temporary Git worktrees and a controlled HTTP GitLab server. They cover the run

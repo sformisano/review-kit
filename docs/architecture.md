@@ -286,8 +286,9 @@ Application tests exercise this distinction through fake provider and renderer p
 
 Before the first possible dispatch, the CLI also stops when the head or comparison
 differs from the run's capture, or when an existing object that the publication
-writes to changed since it. The engine refuses a round whose writes leave the
-compared objects before it records an intent. After a possible dispatch,
+writes to changed since capture. Before it records any intent, the engine
+refuses a round that would write to an existing object outside the compared
+ones. After a possible dispatch,
 recovery uses the original capture and the engine's per-effect checks. The
 [publication reference](../crates/bin/cli/README.md#publication-and-recovery)
 gives the check order for each command.

@@ -296,12 +296,14 @@ to an ordinary token.
 With `BotLookup::Resolve`, capture asks `GET /users/:id` once for each distinct
 non-system note author, in discussion order, for at most `BOT_LOOKUP_LIMIT` (50)
 authors. A response for that user with a boolean `bot` sets `Bot` or `NotBot`.
-Every other result leaves the author `Unknown`. A missing, hidden or malformed
-account affects only that author. Any other failure, such as a rate limit,
-transport loss or a server error, stops the lookups, and the remaining authors
-stay `Unknown`. A lookup never fails capture. Freshness ignores accounts, so the
-CLI resolves only during `run start`; its publication preflight captures with
-`BotLookup::Skip`, which sends no lookup and leaves every bot status `Unknown`.
+Every other result leaves the author `Unknown`. A `403` or `404` response, or
+a body that is malformed, names another user or lacks a boolean `bot`, affects
+only that author. Any other failure stops the lookups, for example a rejected
+credential (`401`), a rate limit (`429`), another rejected status, a redirect
+or transport loss. The remaining authors stay `Unknown`. A lookup never fails
+capture. Freshness ignores accounts, so the CLI resolves only during
+`run start`; its publication preflight captures with `BotLookup::Skip`, which
+sends no lookup and leaves every bot status `Unknown`.
 
 Verified against the pinned CE 19.3.3 server: Developer tokens with `api` or
 `read_api` scope read `bot` for a project access token bot (`true`, shown in

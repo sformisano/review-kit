@@ -121,10 +121,10 @@ Preflight validation, profile assets, and bodies whose inputs are available befo
 Render dependent bodies when verified provider references become available, before writing those bodies.
 The [architecture](architecture.md) explains the dependency and partial-publication limit.
 Discover current owned state before deriving effects.
-Before the first possible dispatch, require the current revision to equal the run's capture
-and the existing objects that the publication writes to to be unchanged since it:
+Before the first possible dispatch, require the current revision to equal the run's capture.
+Also require no change since capture in the existing objects that the publication writes to:
 the reviewer's summary note and each finding thread that receives a reply, a resolve or a reopen.
-Any change inside such a thread blocks, whoever made it; for the summary, only an edit, move or removal of the note blocks.
+Any change inside such a thread blocks, whoever made it. For the summary, only a change to the note itself blocks.
 Replies to the summary, the reviewer's threads without a planned effect, activity by other people or bots elsewhere, and title or description edits do not block.
 Refuse any write to an existing object that the check did not compare.
 Publish the assessed snapshot, not later events.

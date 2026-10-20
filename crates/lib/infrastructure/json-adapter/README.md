@@ -43,7 +43,8 @@ meaning for review agents.
 `YYYY-MM-DDTHH:MM:SS[.fraction]Z` and every note's author account. Each
 position is written as the provider's JSON object.
 
-`into_conversation()` rejects unknown fields, other versions and kinds.
+Decoding rejects unknown fields and other kinds, and `into_conversation()`
+rejects versions other than 1 and 2 (`JsonError::Version`).
 Every discussion needs `resolved` and every note needs `position`; either can be
 `null`. `resolved` is `null` exactly when `resolvable` is false. IDs and authors
 are nonblank, each discussion has a note, and discussion and note IDs are

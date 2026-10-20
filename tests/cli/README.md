@@ -83,9 +83,9 @@ retained files and assessments, private-body exclusion and actual Developer
 `read_api` write rejection. [Authority controls](../../crates/bin/cli/tests/e2e/controls.rs)
 cover planning, missing authority, reviewer mismatch, partial publication,
 a retained unknown write that blocks another worktree's run, abandonment, a
-subsequent round, and a run captured before the reviewer's summary changed
-whose plan against the current history writes nothing, so it settles without
-writes.
+subsequent round, and a stale run. The stale run was captured before the
+reviewer's summary changed, and its plan against the current history writes
+nothing, so it settles without writes.
 Controlled HTTP and adapter suites cover transport loss and source variants.
 The managed suite also exports a custom profile and verifies every role against
 GitLab, followed by an unchanged retry and a fix on a new commit.
@@ -97,15 +97,17 @@ Kit markers into their notes, and the author edits the title and description.
 Publication still completes with exactly its planned effects, and independent
 REST reads show every foreign note unchanged. The retained
 `review-conversation.json` names each author's username, with `author_bot`
-`true` for the bot and `false` for the people. A round that answers only in
-finding 2's thread still publishes after the author and the bot reply in
-finding 1's thread, the author resolves it and a commenter replies to the
-summary: REST reads show finding 1's thread unchanged, the reply to the summary
-kept and the summary recording only the answered note. A reply or a resolution
-change in a thread that the round answers in refuses planning and publication
-with `conversation_changed` and writes nothing; a fresh run then publishes. A run
-captured in another worktree before that publication, whose plan writes the
-summary, is refused with the summary change.
+`true` for the bot and `false` for the people.
+
+A later round answers only in finding 2's thread. Before it publishes, the
+author and the bot reply in finding 1's thread, the author resolves it and a
+commenter replies to the summary. The round still publishes. REST reads show
+finding 1's thread unchanged, the reply to the summary kept and the summary
+recording only the answered note. A reply or a resolution change in a thread
+that the round answers in refuses planning and publication with
+`conversation_changed` and writes nothing; a fresh run then publishes. A run
+captured in another worktree before that publication plans a summary update,
+so it is refused with the summary change.
 
 Each scenario owns a unique private namespace and a `tempfile` directory under
 ignored `tests/cli/.local/`. Success revokes the project's access tokens and

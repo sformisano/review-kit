@@ -184,9 +184,9 @@ It identifies authors by `author` alone, so a renamed account, a missing usernam
 
 Publication freshness uses `Conversation::changes_to` with `WriteTargets`: the existing provider objects that one publication writes to.
 `WriteTargets::of(plan, histories, pending)` collects them from the plan that executes and a retained `pending` write that recovery resumes first.
-A plan with any write targets each history's summary note by that history's reviewer.
-Each reply or resolution action targets the matching owned finding root of each history.
-A `Reply` or `SetResolved` pending write targets its thread, and a pending summary update targets its summary note.
+When the plan writes anything, each history's summary notes by that history's reviewer are targets.
+Each reply or resolution action adds the matching owned finding root of each history.
+A pending `Reply` or `SetResolved` write adds its thread, and a pending summary update adds its summary note.
 An unchanged plan has no targets of its own, and a new finding root is no target because it does not exist before publication.
 Discovery verifies owned records from the API author and corroborated markers, so a copied marker in another author's note adds nothing.
 Callers pass the history captured with the retained conversation and the current discovery.

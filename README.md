@@ -196,12 +196,12 @@ the requested operations are allowed by the configuration. GitLab also checks th
 account's permissions and token scope.
 
 Before the first write, the current head and comparison must still equal the
-run's capture, and the summary note and the finding threads that the
-publication writes to must be unchanged. A change fails with `source_changed`
-or `conversation_changed` (exit `3`); assess it in a new run with
-`rkc run start --new`. Activity elsewhere, including replies to the summary and
-the reviewer's threads that the publication leaves alone, does not block; the
-[publication reference](crates/bin/cli/README.md#publication-and-recovery)
+run's capture. The summary note and the finding threads that the publication
+writes to must also be unchanged. A change fails with `source_changed` or
+`conversation_changed` (exit `3`); assess it in a new run with
+`rkc run start --new`. Activity elsewhere does not block, including replies to
+the summary and changes in the reviewer's threads that the publication leaves
+alone. The [publication reference](crates/bin/cli/README.md#publication-and-recovery)
 defines the rule.
 Publication communicates the assessed snapshot, not later events.
 
@@ -227,7 +227,7 @@ Later runs use the existing findings and discussions:
 | A completed assessment and its comments are unchanged | Verify the existing comments; write nothing, create no new round and complete the run as `no_changes` |
 
 The summary lists verified finding states and actions. Each earlier round has
-its own collapsed table, preserving the states communicated in that round.
+its own collapsed findings table, preserving the states communicated in that round.
 Review Kit manages comments and discussion state. It does not approve or merge
 requests, delete comments, or apply suggestions.
 

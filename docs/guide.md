@@ -94,13 +94,14 @@ returns its reference. Planning performs no provider writes.
 Before the first write, the CLI compares the current head and comparison with
 the run's capture. It also compares, with their captured state, the summary note
 and each finding thread where this publication will reply, resolve or reopen.
-If the author pushed a commit, someone edited the summary note, or someone
-replied in, edited or resolved one of those threads, publication stops before
-writing anything. The agent assesses the change in a new run. Replies to the
-summary, replies in the reviewer's other threads, comments elsewhere by people
-or bots, and title or description edits do not stop publication; the next
-review assesses them. Publication communicates the assessed snapshot, not later
-events.
+If the author pushed a commit, or someone changed the summary note or one of
+those threads, publication stops before writing anything. The agent assesses
+the change in a new run. Activity elsewhere, such as replies to the summary,
+comments by people or bots in other threads, and title or description edits,
+does not stop publication. The next review assesses it. The
+[publication reference](../crates/bin/cli/README.md#publication-and-recovery)
+lists which changes block. Publication communicates the assessed snapshot, not
+later events.
 
 For publication, assume the capture is current, no owned summary
 exists, and the caller grants the required write authority.
