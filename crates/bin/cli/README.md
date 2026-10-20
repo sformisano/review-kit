@@ -625,7 +625,7 @@ The captured prior findings remain authoritative.
 It archives and discards unaccepted edits.
 Without regeneration, malformed drafts fail with `malformed_draft` and remain unchanged.
 A run owning unfinished publication cannot revise or accept a successor.
-Changed source or changed reviewer threads require a new capture, not a revision.
+Changed source or changed write targets require a new capture, not a revision.
 
 ## Publication and recovery
 
@@ -704,9 +704,11 @@ The freshness preflight runs in this order:
 3. Compare the current revision with the captured one (`source_changed`).
 4. Plan the accepted assessment against the current discovery with the same
    progress; this is the plan that publication executes. When that plan cannot
-   be built, publication writes nothing and the plan of step 1 is used instead,
-   so a change that broke the plan, such as a deleted answered note, is reported
-   as `conversation_changed`.
+   be built, the plan of step 1 names the targets instead, so a change that
+   broke the plan, such as a deleted answered note, is reported as
+   `conversation_changed`. The operation log records why the plan failed, and
+   the engine's own check in step 7 keeps every write inside the compared
+   targets.
 5. Collect the targets of that plan, adding the target of a retained write that
    recovery sends first. Discovery verifies the reviewer's summary note and
    finding threads in the captured and in the current history by API author and
@@ -726,7 +728,7 @@ The freshness preflight runs in this order:
 | `publish --effects ...` of a new run | Steps 1 to 7 | The plan against the current discovery |
 | `publish --effects ... --plan` of a new run or of a binding that sent nothing | Steps 1 to 6; planning writes nothing, so the engine receives no targets | As for the matching `publish` |
 | `publish` of a binding none of whose writes could have reached GitLab | Steps 1 to 7; refusals carry the [unsent-binding](#local-run-state-and-the-journal) `next` | The plan of the bound round with the journal's progress, and the retained prepared write that is resumed first |
-| `publish` or `--plan` after a possible dispatch | Skipped; the engine's per-effect checks apply | None; once a write of the binding may have reached GitLab, the rest of its round writes only what the round planned |
+| `publish` or `--plan` after a possible dispatch | Skipped; the engine's per-effect checks apply | None; once a write of the binding may have reached GitLab, recovery completes the retained round under those checks |
 | `publish --abandon` | None; abandonment only closes the bound round in the summary | None |
 | A settled run | None; the command reports `already_settled` | None |
 

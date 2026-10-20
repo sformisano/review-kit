@@ -4,8 +4,10 @@
 //! its planned effects and leaves that activity untouched. Neither do replies
 //! and a resolution change in a reviewer's thread that the round leaves alone,
 //! or a reply to the summary. A reply or a resolution change in a thread that
-//! the round answers in stops it before any write. The retained capture names
-//! each note author and the bot state that GitLab reports for the account.
+//! the round answers in stops it before any write, and so does a change to the
+//! summary for a run whose plan against the newer history writes it. The
+//! retained capture names each note author and the bot state that GitLab
+//! reports for the account.
 
 use super::super::fixture::{Api, authored_notes, read_json, summary_state};
 use super::super::{
@@ -600,7 +602,9 @@ pub fn conversation_freshness_scope(mut fixture: Fixture) -> Result<()> {
         &json!({"resolved": false}),
     )?;
 
-    // A fresh run assesses the current thread and publishes.
+    // A fresh run assesses the current thread and publishes. A run in another
+    // worktree, captured at the same time with a different assessment, would
+    // then write the summary that the fresh run changed, so it is refused.
     let current = answering(
         &mut fixture,
         "freshness-current",
@@ -609,6 +613,13 @@ pub fn conversation_freshness_scope(mut fixture: Fixture) -> Result<()> {
         &untouched,
         &[(1, &blocking)],
     )?;
+    let parallel = fixture.worktree("freshness-parallel")?;
+    let (stale, draft) =
+        fixture.prepare("freshness-stale", &parallel, &mr, CliOptions::default())?;
+    let mut value = assessments::equivalent(&untouched.accepted()?, draft);
+    value["depth"] = json!("Rechecked the quantity decoding in a parallel review.");
+    stale.write_draft(&value)?;
+    fixture.accept("freshness-stale-assessment", &stale, CliOptions::default())?;
     let before = fixture.observe("freshness-current-foreign", &mr)?;
     let (_, result) = publish(
         &mut fixture,
@@ -628,5 +639,12 @@ pub fn conversation_freshness_scope(mut fixture: Fixture) -> Result<()> {
         "the answer is the only new reviewer note"
     );
     answered_only(&fixture, &after, &summary_id, 4, &blocking)?;
+    refused(
+        &mut fixture,
+        "freshness-stale",
+        &stale,
+        &mr,
+        json!([{"kind": "note_body_changed", "note": summary_id.to_string()}]),
+    )?;
     fixture.finish()
 }

@@ -230,21 +230,7 @@ fn follow_up_owner_yields_after_its_summary_changed(unsent: Unsent) {
         &["publish", "--effects", "review"],
     );
     if let Unsent::Rejected = unsent {
-        let summary = harness.http.state.lock().unwrap().notes[0]["id"].clone();
-        harness
-            .http
-            .state
-            .lock()
-            .unwrap()
-            .faults
-            .push(Fault::response(
-                "PUT",
-                &format!("{MR_PATH}/notes/{summary}"),
-                Response::status(422),
-            ));
-        let (output, rejected) = harness.rkc(&["publish", "--effects", "review"]);
-        assert_eq!(output.status.code(), Some(7), "{rejected:#}");
-        assert_eq!(rejected["provider_write_possible"], false, "{rejected:#}");
+        reject_resumed_summary(&harness);
     }
     let pending = harness.journal();
     assert_eq!(pending["coverage_binding"]["run_id"], owner, "{unsent:?}");
@@ -434,4 +420,135 @@ fn an_unsent_follow_up_owner_resumes_past_a_reply_in_an_untouched_thread() {
         untouched,
         "the finding thread is untouched"
     );
+}
+
+/// An unsent follow-up owner whose round replies in and resolves finding 1's
+/// thread compares that thread: a reply there after the crash refuses its
+/// recovery before any write, and a fresh run releases the binding.
+#[test]
+fn an_unsent_owner_whose_planned_reply_thread_changed_yields_to_a_fresh_run() {
+    for unsent in [Unsent::Prepared, Unsent::Rejected] {
+        let harness = Harness::new();
+        harness.accepted_with_finding();
+        harness.ok(&["publish", "--effects", "review"]);
+        let owner = harness.transition_follow_up("open", "fixed");
+        crash(
+            &harness,
+            "publish.after_intent:1",
+            &["publish", "--effects", "review"],
+        );
+        if let Unsent::Rejected = unsent {
+            reject_resumed_summary(&harness);
+        }
+        let pending = harness.journal();
+        assert_eq!(pending["coverage_binding"]["run_id"], owner, "{unsent:?}");
+        assert_eq!(pending["dispatch_may_have_started"], false, "{unsent:?}");
+        let note = harness
+            .http
+            .state
+            .lock()
+            .unwrap()
+            .question("discussion-1", "Is the cause still lost?");
+        let writes = harness.writes();
+        let failed = harness.fails(
+            &["publish", "--effects", "review"],
+            3,
+            "conversation_changed",
+        );
+        assert_eq!(
+            failed["diagnostics"][0]["changes"],
+            json!([{"kind": "note_added", "discussion": "discussion-1", "note": note.to_string()}]),
+            "{unsent:?}: {failed:#}"
+        );
+        let next = failed["diagnostics"][0]["next"].as_str().unwrap();
+        assert!(next.contains("releases this binding"), "{next}");
+        assert_eq!(harness.writes(), writes, "{unsent:?}: nothing is written");
+        let journal = harness.journal();
+        assert_eq!(journal["coverage_binding"], pending["coverage_binding"]);
+        assert_eq!(journal["unresolved"], pending["unresolved"]);
+
+        let fresh = harness.follow_up_in(&harness.repo, true);
+        let published = harness.ok(&["publish", "--effects", "review"]);
+        assert_eq!(published["status"], "settled", "{published:#}");
+        assert_eq!(harness.journal()["coverage_binding"]["run_id"], fresh);
+        harness.ok(&["run", "select", &owner]);
+        let stopped = harness.ok(&["run", "stop", "--reason", "Superseded by a fresh run."]);
+        assert_eq!(stopped["status"], "stopped");
+    }
+}
+
+/// Resume the crashed owner once with GitLab rejecting its summary update, so
+/// that its binding keeps no intent and no possible write.
+fn reject_resumed_summary(harness: &Harness) {
+    let summary = harness.http.state.lock().unwrap().notes[0]["id"].clone();
+    harness
+        .http
+        .state
+        .lock()
+        .unwrap()
+        .faults
+        .push(Fault::response(
+            "PUT",
+            &format!("{MR_PATH}/notes/{summary}"),
+            Response::status(422),
+        ));
+    let (output, rejected) = harness.rkc(&["publish", "--effects", "review"]);
+    assert_eq!(output.status.code(), Some(7), "{rejected:#}");
+    assert_eq!(rejected["provider_write_possible"], false, "{rejected:#}");
+}
+
+/// The engine refuses an unsent owner's round outside the compared targets;
+/// the guidance says that a fresh run's publication releases the binding.
+#[test]
+fn an_engine_refusal_of_an_unsent_owner_points_at_the_release() {
+    for unsent in [Unsent::Prepared, Unsent::Rejected] {
+        let harness = Harness::new();
+        harness.accepted_with_finding();
+        harness.ok(&["publish", "--effects", "review"]);
+        let owner = harness.follow_up_in(&harness.repo, false);
+        crash(
+            &harness,
+            "publish.after_intent:1",
+            &["publish", "--effects", "review"],
+        );
+        if let Unsent::Rejected = unsent {
+            reject_resumed_summary(&harness);
+        }
+        let pending = harness.journal();
+        let moved = harness.http.state.lock().unwrap().notes[0]["id"]
+            .as_u64()
+            .unwrap()
+            + 1000;
+        harness
+            .http
+            .state
+            .lock()
+            .unwrap()
+            .faults
+            .push(Fault::change_after_read(
+                &format!("{MR_PATH}/discussions"),
+                1,
+                move |state| state.notes[0]["id"] = json!(moved),
+            ));
+        let writes = harness.writes();
+        let refused = harness.fails(&["publish", "--effects", "review"], 3, "uncompared_write");
+        let next = refused["next"].as_str().unwrap();
+        assert!(next.contains("releases this binding"), "{unsent:?}: {next}");
+        assert!(next.contains("rkc run start --new"), "{next}");
+        assert_eq!(refused["diagnostics"][0]["next"], refused["next"]);
+        assert_eq!(refused["provider_write_possible"], false, "{refused:#}");
+        assert_eq!(harness.writes(), writes, "{unsent:?}: nothing is written");
+        let journal = harness.journal();
+        assert_eq!(journal["coverage_binding"], pending["coverage_binding"]);
+        assert_eq!(journal["dispatch_may_have_started"], false);
+        assert_eq!(harness.manifest(&owner)["completion"], json!(null));
+
+        let fresh = harness.follow_up_in(&harness.repo, true);
+        let published = harness.ok(&["publish", "--effects", "review"]);
+        assert_eq!(published["status"], "settled", "{published:#}");
+        assert_eq!(harness.journal()["coverage_binding"]["run_id"], fresh);
+        harness.ok(&["run", "select", &owner]);
+        let stopped = harness.ok(&["run", "stop", "--reason", "Superseded by a fresh run."]);
+        assert_eq!(stopped["status"], "stopped");
+    }
 }

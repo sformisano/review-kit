@@ -642,31 +642,6 @@ enum PlannedEffect {
     Recurrence,
 }
 
-/// Capture and accept a follow-up that transitions finding 1 `from` → `to`.
-fn transition_follow_up(harness: &Harness, from: &str, to: &str) -> String {
-    let run_id = harness.start();
-    harness.declare_policies(&run_id, &[ERROR_POLICY, PROOF_POLICY]);
-    let path = harness.file(&run_id, "review-assessment.draft.json");
-    let mut draft = read_json(&path);
-    super::harness::ready(&mut draft);
-    let slot = &mut draft["findings"][0]["reassessment"];
-    slot["status"] = json!(to);
-    slot["evidence"] = json!(format!("The current source establishes the {to} state."));
-    draft["transitions"] = json!([{"finding": 1, "from": from, "to": to,
-        "body": format!("The committed change makes this finding {to}.")}]);
-    if to == "open" {
-        draft["decision"] = json!("changes_required");
-        for policy in draft["policies"].as_array_mut().unwrap() {
-            if policy["policy_id"] == ERROR_POLICY {
-                policy["outcome"] = json!({"kind": "violated", "evidence": "The failure path discards the cause again."});
-            }
-        }
-    }
-    write_json(&path, &draft);
-    harness.ok(&["accept"]);
-    run_id
-}
-
 /// A thread that receives a transition reply and a resolution change in this
 /// publication is compared: a later reply there blocks before any write.
 #[test]
@@ -677,14 +652,14 @@ fn a_thread_with_a_planned_transition_and_resolution_change_is_compared() {
         harness.ok(&["publish", "--effects", "review"]);
         let [thread] = owned_threads(&harness).try_into().unwrap();
         if let PlannedEffect::Recurrence = effect {
-            transition_follow_up(&harness, "open", "fixed");
+            harness.transition_follow_up("open", "fixed");
             let fixed = harness.ok(&["publish", "--effects", "review"]);
             assert_eq!(fixed["status"], "settled", "{fixed:#}");
             assert_eq!(thread_json(&harness, &thread)["notes"][0]["resolved"], true);
         }
         let run_id = match effect {
-            PlannedEffect::Fixed => transition_follow_up(&harness, "open", "fixed"),
-            PlannedEffect::Recurrence => transition_follow_up(&harness, "fixed", "open"),
+            PlannedEffect::Fixed => harness.transition_follow_up("open", "fixed"),
+            PlannedEffect::Recurrence => harness.transition_follow_up("fixed", "open"),
         };
         let planned = harness.ok(&["publish", "--effects", "review", "--plan"]);
         let kinds: Vec<_> = planned["run"]["outcome"]["plan"]["actions"]
@@ -866,4 +841,40 @@ fn the_engine_refuses_a_write_outside_the_compared_targets() {
     assert_eq!(published["status"], "settled", "{published:#}");
     assert_eq!(harness.manifest(&fresh)["completion"], "published");
     assert_eq!(summary_note(&harness), moved);
+}
+
+/// A change that makes the current plan fail, here a deleted answered note,
+/// is still compared through the captured plan's targets and reported; the
+/// operation log keeps why the current plan failed.
+#[test]
+fn a_change_that_breaks_the_current_plan_is_reported_and_its_reason_logged() {
+    let harness = Harness::new();
+    let follow_up = answering_follow_up(&harness);
+    let expected = apply(&harness, OwnedChange::DeletedNote, &follow_up);
+    let refused = harness.fails(
+        &["publish", "--effects", "review"],
+        3,
+        "conversation_changed",
+    );
+    assert_eq!(refused["diagnostics"][0]["changes"], json!([expected]));
+    let log = std::fs::read_to_string(
+        harness
+            .root
+            .path()
+            .join(".review-kit/logs/review-kit.jsonl"),
+    )
+    .unwrap();
+    let failed: Vec<Value> = log
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap()["execution"].clone())
+        .filter(|record| {
+            record["operation"] == "application.publication.check_review_with_progress"
+                && record["outcome"] == "failure"
+        })
+        .collect();
+    assert_eq!(failed.len(), 1, "{failed:#?}");
+    assert_eq!(
+        failed[0]["error"]["fields"]["issues"][0]["error"]["variant"], "invalid_answer",
+        "{failed:#?}"
+    );
 }

@@ -54,13 +54,21 @@ pub fn changed_revision(round: Option<u64>) -> Value {
 /// The engine refused a round that would write to an existing summary note
 /// or finding thread outside the targets that the freshness preflight
 /// compared; it stopped before recording any write intent.
+///
+/// A run whose `unsent` binding stays in the journal learns that only a fresh
+/// run's publication releases it.
 #[review_kit_observation::operations]
 #[helper]
-pub fn uncompared_write() -> Value {
+pub fn uncompared_write(unsent: bool) -> Value {
+    let next = if unsent {
+        "The reviewer's history on the merge request changed after the freshness preflight, and no write of this run's publication binding could have reached the provider. Start a fresh run with rkc run start --new and publish it; that publication releases this binding, after which this run can be stopped."
+    } else {
+        "The reviewer's history on the merge request changed after the freshness preflight. Start a fresh run with rkc run start --new."
+    };
     json!({
         "code": "uncompared_write",
         "message": "the publication would write to an existing summary note or finding thread that the freshness preflight did not compare, so it stopped before any write",
-        "next": "The reviewer's history on the merge request changed after the freshness preflight. Start a fresh run with rkc run start --new.",
+        "next": next,
     })
 }
 

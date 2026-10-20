@@ -327,6 +327,31 @@ impl Harness {
     }
 
     /// A new run with one blocking finding, started with `--new` beside an open run.
+    /// Capture and accept a follow-up that transitions finding 1 `from` → `to`.
+    pub fn transition_follow_up(&self, from: &str, to: &str) -> String {
+        let run_id = self.start();
+        self.declare_policies(&run_id, &[ERROR_POLICY, PROOF_POLICY]);
+        let path = self.file(&run_id, "review-assessment.draft.json");
+        let mut draft = read_json(&path);
+        ready(&mut draft);
+        let slot = &mut draft["findings"][0]["reassessment"];
+        slot["status"] = json!(to);
+        slot["evidence"] = json!(format!("The current source establishes the {to} state."));
+        draft["transitions"] = json!([{"finding": 1, "from": from, "to": to,
+            "body": format!("The committed change makes this finding {to}.")}]);
+        if to == "open" {
+            draft["decision"] = json!("changes_required");
+            for policy in draft["policies"].as_array_mut().unwrap() {
+                if policy["policy_id"] == ERROR_POLICY {
+                    policy["outcome"] = json!({"kind": "violated", "evidence": "The failure path discards the cause again."});
+                }
+            }
+        }
+        write_json(&path, &draft);
+        self.ok(&["accept"]);
+        run_id
+    }
+
     pub fn accepted_follow_up(&self) -> String {
         let run_id = self.ok(&["run", "start", "--new"])["run_id"]
             .as_str()

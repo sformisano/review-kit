@@ -247,8 +247,8 @@ pub(crate) fn publish_recorded_managed(
                 ) {
                     Ok(()) => {
                         drop(execution);
-                        // The scope covered the whole resumed round before its
-                        // first write; the rest of the round writes a subset.
+                        // A dispatched write puts the invocation after a possible
+                        // dispatch, where the scope check does not apply.
                         if let Some(bound) = binding.as_deref_mut() {
                             bound.scope = None;
                         }

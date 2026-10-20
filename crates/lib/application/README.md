@@ -199,7 +199,7 @@ A different subject is always reported. Title, description and every other discu
 `BindingRequest::write_scope` carries the targets that the caller compared.
 Bound publication then refuses with `PlanError::UncomparedWrite`, before it records any intent, when the targets of its own plan are not all in that scope.
 On recovery of a write that was never sent, the check covers the retained write together with the rest of its round before that write is dispatched.
-After a write of the invocation is dispatched, the rest of the round writes a subset of what was checked, and recovery after a possible dispatch passes no scope.
+After a write of the invocation is dispatched, the after-dispatch rule applies: the rest of the round runs without the check, as recovery after a possible dispatch does, and only the engine's per-effect checks guard it.
 `None` skips the check.
 The [conversation tests](src/conversation/tests.rs) and [published-history tests](tests/review_workflow/conversation_freshness.rs) cover these rules.
 

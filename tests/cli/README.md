@@ -103,11 +103,13 @@ finding 1's thread, the author resolves it and a commenter replies to the
 summary: REST reads show finding 1's thread unchanged, the reply to the summary
 kept and the summary recording only the answered note. A reply or a resolution
 change in a thread that the round answers in refuses planning and publication
-with `conversation_changed` and writes nothing; a fresh run then publishes.
+with `conversation_changed` and writes nothing; a fresh run then publishes. A run
+captured in another worktree before that publication, whose plan writes the
+summary, is refused with the summary change.
 
 Each scenario owns a unique private namespace and a `tempfile` directory under
-ignored `tests/cli/.local/`. Success requests deletion of the exact verified
-project, group and users. Failure on an external server retains provider resources
+ignored `tests/cli/.local/`. Success revokes the project's access tokens and
+requests deletion of the exact verified project, group and users. Failure on an external server retains provider resources
 for inspection. A managed service drops its container and provider resources when
 the suite exits. Local manifests, credentials, child output and REST observations
 remain available in both cases. The fixture prints its manifest path.
@@ -358,10 +360,11 @@ to retain which sources a reviewer read.
 
 ### Cleanup
 
-`cleanup --manifest MANIFEST` verifies every recorded identity, permanently removes
-the projects and deletes the users. GitLab permits permanent removal only for
-subgroups, so the empty top-level group stays scheduled for deletion until the
-instance's retention period ends. Cleanup accepts the paths GitLab assigns to
+`cleanup --manifest MANIFEST` verifies every recorded identity, revokes the
+project's active access tokens, requests deletion of the project and group and
+deletes the users. GitLab keeps a project bot user and its token working until it
+removes the project, and the project and its top-level group stay scheduled for
+deletion until the instance's retention period ends. Cleanup accepts the paths GitLab assigns to
 scheduled deletions, saves `evidence/cleanup.json`, and can run again to finish an
 interrupted cleanup.
 

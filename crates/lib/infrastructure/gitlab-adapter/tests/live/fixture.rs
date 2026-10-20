@@ -260,7 +260,8 @@ impl Fixture {
         }
     }
     /// A project access token's bot user, or `None` when the server refuses
-    /// to create one. Project deletion removes the bot with its token.
+    /// to create one. GitLab keeps the bot and its token working while the
+    /// project waits for deletion, so cleanup revokes the token first.
     pub fn add_project_bot(&self, expires_at: &str) -> Option<User> {
         let response = self
             .admin
@@ -386,6 +387,9 @@ impl Fixture {
     // Failed scenarios preserve their fixture for inspection. Successful ones
     // request deletion only for resources this fixture created.
     pub fn cleanup(self) {
+        for project in [self.project].iter().chain(&self.projects) {
+            revoke_project_tokens(&self.admin, *project);
+        }
         for project in self.projects {
             self.admin.delete(&format!("projects/{project}"));
         }
@@ -397,6 +401,16 @@ impl Fixture {
             .chain(self.users)
         {
             self.admin.delete(&format!("users/{user}?hard_delete=true"));
+        }
+    }
+}
+
+/// Revokes every active access token of `project`.
+fn revoke_project_tokens(admin: &Api, project: u64) {
+    let tokens = admin.get(&format!("projects/{project}/access_tokens?per_page=100"));
+    for token in tokens.as_array().unwrap() {
+        if token["active"] == true {
+            admin.delete(&format!("projects/{project}/access_tokens/{}", token["id"]));
         }
     }
 }

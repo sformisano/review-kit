@@ -233,7 +233,7 @@ pub fn execute(
     {
         value["next"] = json!(guidance::stranded_guidance(stranded, None));
     } else if let Err(PlanError::UncomparedWrite) = &report.outcome {
-        let diagnostic = guidance::uncompared_write();
+        let diagnostic = guidance::uncompared_write(unsent);
         value["next"] = diagnostic["next"].clone();
         value["diagnostics"] = json!([diagnostic]);
     } else if finished.status == "unfinished" && run_exit(&report) == 3 {
@@ -256,7 +256,9 @@ pub fn execute(
             .is_some_and(|binding| &binding.run_id == session.run.run_id())
     {
         value["provider_write_possible"] = json!(false);
-        value["next"] = json!(journal::UNSENT_GUIDANCE);
+        if !matches!(report.outcome, Err(PlanError::UncomparedWrite)) {
+            value["next"] = json!(journal::UNSENT_GUIDANCE);
+        }
     }
     Ok(CommandOutput {
         value,

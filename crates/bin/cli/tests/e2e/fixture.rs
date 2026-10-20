@@ -343,7 +343,8 @@ impl Fixture {
         Ok(api)
     }
     /// A project access token's bot user with Developer access, such as an
-    /// automated reviewer; deleting the project removes it.
+    /// automated reviewer. GitLab keeps the bot and its token working while
+    /// the project waits for deletion, so cleanup revokes the token first.
     #[allow(dead_code, reason = "used by live freshness scenarios")]
     pub fn project_bot(&mut self) -> Result<Api> {
         let token = provision::issue_project_token(
@@ -690,10 +691,26 @@ impl Fixture {
                 && project["namespace"]["id"] == self.manifest["group_id"],
             "cleanup resource identities differ"
         );
-        let mut resources = vec![
+        let tokens = self.admin.pages(&format!(
+            "projects/{}/access_tokens",
+            self.manifest["project_id"]
+        ))?;
+        let mut resources: Vec<String> = tokens
+            .as_array()
+            .context("project access tokens")?
+            .iter()
+            .filter(|token| token["active"] == true)
+            .map(|token| {
+                format!(
+                    "projects/{}/access_tokens/{}",
+                    self.manifest["project_id"], token["id"]
+                )
+            })
+            .collect();
+        resources.extend([
             format!("projects/{}", self.manifest["project_id"]),
             format!("groups/{}", self.manifest["group_id"]),
-        ];
+        ]);
         for role in ["author", "reviewer", "commenter"] {
             let retained = &self.manifest[role];
             if role == "commenter" && retained.is_null() {

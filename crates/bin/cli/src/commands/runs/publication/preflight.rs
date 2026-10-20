@@ -54,12 +54,12 @@ pub fn discover_current(gitlab: &GitLab, run: &LoadedRun) -> Result<Snapshot, Cl
 /// from the plan that publication executes: the accepted assessment planned
 /// against `snapshot`, the current discovery, with the run's own `progress`,
 /// and the retained unresolved write of that progress, which recovery resumes
-/// first. When that plan cannot be built, publication writes nothing and the
-/// targets of `preview`, the plan against the captured history, are compared
-/// instead, so a change that broke the plan is reported as a conversation
-/// change. The captured and the current history name the targets' threads.
-/// Conversation changes count only inside them; ordering and observation
-/// time are ignored.
+/// first. When that plan cannot be built, the targets of `preview`, the plan
+/// against the captured history, are compared instead, so a change that broke
+/// the plan is reported as a conversation change. In either case the engine
+/// refuses any write outside the returned targets. The captured and the
+/// current history name the targets' threads. Conversation changes count only
+/// inside them; ordering and observation time are ignored.
 #[review_kit_observation::operations]
 #[helper]
 pub fn require_fresh(
@@ -83,6 +83,8 @@ pub fn require_fresh(
             "current_head": snapshot.revision.head(),
         })));
     }
+    // The check is an observed operation: its log record keeps the reason
+    // when the plan cannot be built.
     let executing = check_review_with_progress(
         &chain.request,
         snapshot,

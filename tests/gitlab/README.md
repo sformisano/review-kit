@@ -151,8 +151,9 @@ Reviewer tokens exist only in test memory. No credential is printed.
 Fixture clients restrict writes to the validated loopback endpoint.
 
 Each scenario creates a new namespace. A successful scenario requests deletion
-of only its own resources; GitLab applies its deletion policy. A project bot
-user is removed with its project under that policy. A failed scenario
+of only its own resources; GitLab applies its deletion policy. GitLab keeps a
+project bot user and its token working until it removes the project, so cleanup
+first revokes every active access token of the scenario's projects. A failed scenario
 retains its namespace and users for inspection and prints the namespace name.
 An external server preserves failed fixtures after the suite ends.
 A disposable service removes them when its container is dropped.

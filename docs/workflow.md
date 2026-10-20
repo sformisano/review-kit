@@ -51,7 +51,7 @@ Read-only modes perform no provider writes.
 The run use case sends an empty effect selection through planning without acquiring a publication session.
 The [application coverage table](../crates/lib/application/README.md#use-cases-and-command-coverage) identifies the implemented Rust APIs.
 The [CLI exit codes](../crates/bin/cli/README.md#output-and-exit-status) distinguish
-invalid input, changed revision or reviewer threads, authority limits, conflicts and provider uncertainty.
+invalid input, changed revision or write targets, authority limits, conflicts and provider uncertainty.
 Exit zero can carry a non-completed publication status; consumers must read the structured result.
 New advisory findings remain eligible for inline publication under the finding admission rules.
 
