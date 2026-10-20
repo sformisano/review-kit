@@ -329,7 +329,9 @@ users such as GitLab Duo (`GitLabDuo`) as bots. rkc asks GitLab for the bot
 status only during `run start`, once per distinct note author and for at most
 50 authors; planning and publication ask nothing. `author_bot` is `null` when
 GitLab refused or failed the lookup, when the lookup hit a rate limit, or when
-the author was beyond the 50-author limit. A version 1 file has no
+the author was beyond the 50-author limit. Once a lookup fails for a reason
+other than a missing, hidden or malformed account, later authors are not
+looked up and stay `null`. A version 1 file has no
 `author_bot` field, which also means unknown. Treat `null` or a missing field
 as unknown: it shows neither a bot nor a person. `false` reports GitLab's
 account type only; it does not prove that a person wrote the note. The
@@ -347,14 +349,19 @@ owns the schema and validation.
 rkc 0.1.0 cannot read version 2. For a run started by rkc 0.1.1 or later,
 rkc 0.1.0 reports the file as damaged: `status` shows
 `retained_files.state: "damaged"`, and `check` and `publish --plan` fail with
-`invalid_run_document`. It cannot recover such a run's unfinished publication,
-so every other run of the same merge request and reviewer fails with
-`publication_pending_owner` until the newer rkc finishes it.
-[Rollback](../../../docs/distribution.md#upgrade-and-rollback) lists what to
-finish first. A conversation version above the one this rkc reads fails with
+`invalid_run_document`. When such a run owns unfinished publication and one of
+its writes may have reached GitLab, rkc 0.1.0 cannot recover it, and every
+other run of the same merge request and reviewer fails with
+`publication_pending_owner` until the newer rkc finishes it. A binding whose
+writes could not have been sent is released when another run publishes.
+[Rollback](../../../docs/distribution.md#upgrade-and-rollback)
+lists what to finish first. An intact conversation, whose bytes match the
+manifest hash, with a version above the one this rkc reads fails with
 `newer_run_document` (exit `2`), with `file`, `version` and `supported` in the
 diagnostic, and `status` shows `retained_files.state: "newer"`. Continue such a
-run with the newer rkc that wrote it.
+run with the newer rkc that wrote it. `status` reports a changed or malformed
+file as damaged, and commands fail with `hash_mismatch` or
+`invalid_run_document`.
 
 A note by a project access token bot, with illustrative values:
 

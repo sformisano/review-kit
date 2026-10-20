@@ -6,7 +6,7 @@ use std::fs;
 use serde_json::{Value, json};
 
 use super::{
-    harness::{ERROR_POLICY, Harness, read_json, sha256},
+    harness::{ERROR_POLICY, Harness, read_json},
     server::{Fault, MR_PATH, Response},
 };
 
@@ -77,7 +77,7 @@ fn a_run_with_a_version_1_conversation_still_plans_and_publishes() {
             note.remove("author_bot").unwrap();
         }
     }
-    retain_conversation(&harness, &run_id, &document);
+    harness.retain_conversation(&run_id, &document);
 
     harness.declare_policies(&run_id, &[ERROR_POLICY]);
     harness.fill_ready(&run_id);
@@ -117,17 +117,6 @@ fn a_note_author_without_a_username_does_not_stop_publication() {
     assert_eq!(accounts(&document), [json!(["93", null, false])]);
 }
 
-/// Replace the run's conversation with `document` and record its hash, as the
-/// run that wrote it would have.
-fn retain_conversation(harness: &Harness, run_id: &str, document: &Value) {
-    let bytes = serde_json::to_vec_pretty(document).unwrap();
-    fs::write(harness.file(run_id, "review-conversation.json"), &bytes).unwrap();
-    let manifest = harness.file(run_id, "review-run.json");
-    let mut value = read_json(&manifest);
-    value["snapshot_files"]["review-conversation.json"] = json!(sha256(&bytes));
-    fs::write(&manifest, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
-}
-
 /// A conversation that a newer rkc wrote, with a higher version and a field
 /// this build does not know, is reported as newer instead of damaged.
 #[test]
@@ -139,7 +128,7 @@ fn a_conversation_from_a_newer_rkc_is_reported_as_newer_not_damaged() {
     let mut newer = original.clone();
     newer["version"] = 3.into();
     newer["discussions"][0]["notes"][0]["author_avatar"] = "avatar.png".into();
-    retain_conversation(&harness, &run_id, &newer);
+    harness.retain_conversation(&run_id, &newer);
 
     let status = harness.ok(&["status"]);
     assert_eq!(status["retained_files"]["state"], "newer", "{status:#}");
@@ -171,7 +160,7 @@ fn a_conversation_from_a_newer_rkc_is_reported_as_newer_not_damaged() {
         .to_owned();
     let mut malformed = original;
     malformed["discussions"][0]["notes"][0]["author_avatar"] = "avatar.png".into();
-    retain_conversation(&harness, &damaged, &malformed);
+    harness.retain_conversation(&damaged, &malformed);
     let status = harness.ok(&["status"]);
     assert_eq!(status["retained_files"]["state"], "damaged", "{status:#}");
     harness.fails(&["check"], 2, "invalid_run_document");
@@ -194,7 +183,7 @@ fn an_owner_whose_conversation_a_newer_rkc_wrote_is_told_to_use_that_rkc() {
     assert_eq!(output.status.code(), Some(6), "{uncertain:#}");
     let mut newer = read_json(&harness.file(&owner, "review-conversation.json"));
     newer["version"] = 3.into();
-    retain_conversation(&harness, &owner, &newer);
+    harness.retain_conversation(&owner, &newer);
     let status = harness.ok(&["status"]);
     assert_eq!(
         status["journal"]["publication_status"], "pending",
@@ -207,4 +196,65 @@ fn an_owner_whose_conversation_a_newer_rkc_wrote_is_told_to_use_that_rkc() {
         "{next}"
     );
     assert!(!next.contains("Restore"), "{next}");
+}
+
+/// Only an intact conversation file of the documented shape counts as newer:
+/// a changed file, a non-object and a file of another kind stay damaged, and
+/// a newer file next to other damage is damage.
+#[test]
+fn only_an_intact_conversation_counts_as_newer() {
+    let harness = Harness::new();
+    harness.add_comment("question", "Is the cause kept?");
+    let run_id = harness.start();
+    let path = harness.file(&run_id, "review-conversation.json");
+    let original = read_json(&path);
+    let mut newer = original.clone();
+    newer["version"] = 3.into();
+
+    fs::write(&path, serde_json::to_vec_pretty(&newer).unwrap()).unwrap();
+    let status = harness.ok(&["status"]);
+    assert_eq!(status["retained_files"]["state"], "damaged", "{status:#}");
+    assert!(
+        status["next"]
+            .as_str()
+            .unwrap()
+            .contains("restore the run's exact files"),
+        "{status:#}"
+    );
+    harness.fails(&["check"], 2, "hash_mismatch");
+
+    for shape in [json!([3]), json!({"version": 3}), {
+        let mut other = newer.clone();
+        other["kind"] = "review_context".into();
+        other
+    }] {
+        harness.retain_conversation(&run_id, &shape);
+        let status = harness.ok(&["status"]);
+        assert_eq!(
+            status["retained_files"]["state"], "damaged",
+            "{shape}: {status:#}"
+        );
+    }
+
+    harness.retain_conversation(&run_id, &newer);
+    assert_eq!(harness.ok(&["status"])["retained_files"]["state"], "newer");
+    fs::remove_file(harness.file(&run_id, "merge-request.diff")).unwrap();
+    let status = harness.ok(&["status"]);
+    let retained = &status["retained_files"];
+    assert_eq!(retained["state"], "damaged", "{status:#}");
+    assert_eq!(
+        retained["files"],
+        json!(["merge-request.diff", "review-conversation.json"])
+    );
+    let codes: Vec<_> = retained["problems"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|problem| problem["code"].clone())
+        .collect();
+    assert!(codes.contains(&json!("newer_run_document")), "{codes:?}");
+    assert!(
+        codes.iter().any(|code| code != "newer_run_document"),
+        "{codes:?}"
+    );
 }

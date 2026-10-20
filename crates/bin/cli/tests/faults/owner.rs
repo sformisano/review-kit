@@ -373,3 +373,25 @@ fn an_owner_that_may_have_dispatched_reconciles_despite_a_later_comment() {
         1
     );
 }
+
+/// An owner that sent nothing and whose conversation a newer rkc wrote is told
+/// that this rkc cannot resume it, with the fresh-run way forward.
+#[test]
+fn an_unsent_owner_with_a_newer_conversation_is_pointed_at_a_fresh_run() {
+    let harness = Harness::new();
+    let owner = harness.accepted_with_finding();
+    crash(
+        &harness,
+        "publish.after_intent:1",
+        &["publish", "--effects", "review"],
+    );
+    let mut newer = harness.run_file_json(&owner, "review-conversation.json");
+    newer["version"] = 3.into();
+    harness.retain_conversation(&owner, &newer);
+    let status = harness.ok(&["status"]);
+    assert_eq!(status["journal"]["publication_status"], "bound_unsent");
+    assert_eq!(status["retained_files"]["state"], "newer", "{status:#}");
+    let next = status["next"].as_str().unwrap();
+    assert!(next.contains("cannot resume it"), "{next}");
+    assert!(next.contains("rkc run start --new"), "{next}");
+}

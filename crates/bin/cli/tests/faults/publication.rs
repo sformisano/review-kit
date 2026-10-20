@@ -333,3 +333,25 @@ fn source_change_during_an_uncertain_write_reconciles_it_before_stopping() {
     assert_eq!(harness.manifest(&run_id)["completion"], "abandoned");
     assert_eq!(effects(&harness).1, 1);
 }
+
+/// A settled run whose manifest is still open and whose conversation a newer
+/// rkc wrote is told to record the settlement with that rkc.
+#[test]
+fn a_settled_run_with_a_newer_conversation_is_recorded_by_the_newer_rkc() {
+    let harness = Harness::new();
+    let run_id = harness.accepted_with_finding();
+    crash(
+        &harness,
+        "publish.after_settlement",
+        &["publish", "--effects", "review"],
+    );
+    let mut newer = harness.run_file_json(&run_id, "review-conversation.json");
+    newer["version"] = 3.into();
+    harness.retain_conversation(&run_id, &newer);
+    let status = harness.ok(&["status"]);
+    assert_eq!(status["retained_files"]["state"], "newer", "{status:#}");
+    let next = status["next"].as_str().unwrap();
+    assert!(next.contains("settled publication"), "{next}");
+    assert!(next.contains("a newer rkc wrote"), "{next}");
+    assert!(next.contains("that rkc version or a later one"), "{next}");
+}

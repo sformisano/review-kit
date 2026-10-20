@@ -62,9 +62,15 @@ pub fn execute(options: &CommandOptions) -> Result<CommandOutput, CliError> {
 fn retained_state(stored: &StoredRun) -> Value {
     let damaged = damaged_retained(stored);
     if !damaged.is_empty() {
-        let newer = damaged
-            .iter()
-            .all(|(_, error)| error.document()["diagnostics"][0]["code"] == "newer_run_document");
+        let newer = damaged.iter().all(|(_, error)| {
+            matches!(
+                error,
+                CliError::State {
+                    code: "newer_run_document",
+                    ..
+                }
+            )
+        });
         return json!({
             "state": if newer { "newer" } else { "damaged" },
             "files": damaged.iter().map(|(file, _)| file.name()).collect::<Vec<_>>(),
@@ -177,7 +183,14 @@ fn next_action(
     attempted: bool,
 ) -> String {
     let retained_intact = retained["state"] == "intact";
+    let newer = retained["state"] == "newer";
     match reading.publication(manifest) {
+        Some(RunPublication::BoundUnsent(_)) if newer => {
+            return format!(
+                "A newer rkc wrote this run's retained files, so this rkc cannot resume it. {}",
+                super::journal::UNSENT_GUIDANCE
+            );
+        }
         Some(RunPublication::BoundUnsent(_)) => {
             return super::journal::UNSENT_GUIDANCE.into();
         }
@@ -189,6 +202,9 @@ fn next_action(
                 journal::require_inputs(manifest, &entry.review_assessment, &entry.snapshot_files)
             {
                 return error.to_string();
+            }
+            if newer {
+                return "The journal records this run's settled publication, but a newer rkc wrote this run's retained files; run rkc publish --effects review with that rkc version or a later one to record it in the run manifest without provider writes.".into();
             }
             return "The journal records this run's settled publication; run rkc publish --effects review to record it in the run manifest without provider writes.".into();
         }
@@ -209,7 +225,7 @@ fn next_action(
             super::journal::MISSING_GUIDANCE
         );
     }
-    if retained["state"] == "newer" {
+    if newer {
         return NEWER_GUIDANCE.into();
     }
     if !retained_intact {

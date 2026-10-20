@@ -414,6 +414,33 @@ impl Harness {
             .find(|path| path.is_dir())
     }
 
+    /// A run file decoded as JSON.
+    pub fn run_file_json(&self, run_id: &str, name: &str) -> Value {
+        read_json(&self.file(run_id, name))
+    }
+
+    /// Replace the run's conversation with `document` and record its hash in
+    /// the manifest and in any journal entry that names the run's inputs, as
+    /// the rkc that wrote such a run would have.
+    pub fn retain_conversation(&self, run_id: &str, document: &Value) {
+        let bytes = serde_json::to_vec_pretty(document).unwrap();
+        fs::write(self.file(run_id, "review-conversation.json"), &bytes).unwrap();
+        let manifest = self.file(run_id, "review-run.json");
+        let mut value = read_json(&manifest);
+        let previous = value["snapshot_files"]["review-conversation.json"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let current = sha256(&bytes);
+        value["snapshot_files"]["review-conversation.json"] = json!(current);
+        fs::write(&manifest, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+        if let Some(directory) = self.journal_dir() {
+            let journal = directory.join("publication-progress.json");
+            let text = fs::read_to_string(&journal).unwrap();
+            fs::write(&journal, text.replace(&previous, &current)).unwrap();
+        }
+    }
+
     pub fn journal(&self) -> Value {
         read_json(
             &self

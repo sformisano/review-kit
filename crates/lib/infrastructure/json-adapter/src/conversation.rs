@@ -231,7 +231,8 @@ impl ConversationNoteData {
 enum Accounts {
     /// Version 1: no note has account fields.
     Absent,
-    /// Version 2: every note has a username and a bot state.
+    /// Version 2: every note has `author_username`, possibly `null`, and
+    /// `author_bot`, possibly `null`.
     Required,
 }
 

@@ -1,6 +1,6 @@
 use review_kit_application::{conversation::Conversation, review_run::RunId};
 use review_kit_filesystem_adapter::{
-    RunDir, RunFile, RunStorageError, RuntimeStore, SnapshotFile, WorkingFile,
+    RunDir, RunFile, RunStorageError, RuntimeStore, SnapshotFile, WorkingFile, content_ref,
 };
 use review_kit_gitlab_adapter::RetainedSource;
 use review_kit_json_adapter::{
@@ -8,7 +8,7 @@ use review_kit_json_adapter::{
     checkpoints::{RepositoryBinding, ReviewRunDocument, RunLifecycle},
 };
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::error::CliError;
 
@@ -134,7 +134,7 @@ fn retained_conversation(
     dir: &RunDir,
     manifest: &ReviewRunDocument,
 ) -> Result<Conversation, CliError> {
-    if let Some(error) = newer_document(dir, SnapshotFile::Conversation, CONVERSATION_VERSION) {
+    if let Some(error) = newer_conversation(dir, manifest) {
         return Err(error);
     }
     let conversation = dir
@@ -148,28 +148,39 @@ fn retained_conversation(
     Ok(conversation)
 }
 
-/// `newer_run_document` when `file` declares a version above `supported`.
+/// `newer_run_document` when the run's `review-conversation.json` declares a
+/// version above [`CONVERSATION_VERSION`].
 ///
-/// Only the `version` field is read, so a newer layout with unknown fields is
-/// still recognised. `None` when the file is unreadable, has no numeric
-/// version or is not newer; the ordinary decoder then reports it.
+/// The file counts only when its bytes match the manifest hash and it is a JSON
+/// object of kind `review_conversation` with one numeric `version`; any other
+/// file is left to the hash check and the decoder, which report it as changed
+/// or damaged. Only `kind` and `version` are read, so a newer layout with
+/// unknown fields is still recognised.
 #[review_kit_observation::operations]
 #[helper]
-fn newer_document(dir: &RunDir, file: SnapshotFile, supported: u64) -> Option<CliError> {
+fn newer_conversation(dir: &RunDir, manifest: &ReviewRunDocument) -> Option<CliError> {
     #[derive(Deserialize)]
     struct Declared {
+        kind: String,
         version: u64,
     }
+    let file = SnapshotFile::Conversation;
     let bytes = dir.read_bytes(file.into()).ok()?;
-    let version = serde_json::from_slice::<Declared>(&bytes).ok()?.version;
-    (version > supported).then(|| {
+    if content_ref(&bytes).ok()? != manifest.snapshot_files.conversation
+        || !serde_json::from_slice::<Value>(&bytes).ok()?.is_object()
+    {
+        return None;
+    }
+    let declared = serde_json::from_slice::<Declared>(&bytes).ok()?;
+    let version = declared.version;
+    (declared.kind == "review_conversation" && version > CONVERSATION_VERSION).then(|| {
         let name = file.name();
         CliError::state(
             "newer_run_document",
             2,
             format!("{name} version {version} was written by a newer rkc; use that rkc version or a later one for this run"),
         )
-        .with_details(json!({"file": name, "version": version, "supported": supported}))
+        .with_details(json!({"file": name, "version": version, "supported": CONVERSATION_VERSION}))
     })
 }
 
