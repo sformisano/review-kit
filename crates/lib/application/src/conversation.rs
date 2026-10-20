@@ -5,9 +5,10 @@
 //! managed finding identity, reply authority, policy selection or effect
 //! authority.
 //!
-//! Comparison uses the normalized view. Discussions and notes are ordered by
-//! identifier and positions compare as canonical JSON text. Observation time and
-//! provider ordering are not part of the model.
+//! Comparison ignores order: discussions and notes match by identifier and
+//! positions compare as canonical JSON text. Note authors compare by provider
+//! user identity only; account details such as the username are context.
+//! Observation time and provider ordering are not part of the model.
 //!
 //! Publication freshness considers only [`OwnedThreads`]: the discussions where
 //! publication writes. Activity elsewhere, including title and description
@@ -92,10 +93,35 @@ impl Resolution {
 pub struct Note {
     pub id: ProviderId,
     /// Provider user identity of the API author, including bot users.
+    /// Comparisons identify the author by this value alone.
     pub author: ReviewerId,
+    /// The author's account when the conversation was captured; `None` when
+    /// the capture predates account details.
+    pub account: Option<AuthorAccount>,
     pub body: String,
     /// `None` for a note without a diff anchor.
     pub position: Option<Position>,
+}
+
+/// A note author's provider account at capture time.
+///
+/// Usernames can change, so an account never identifies the author in
+/// comparisons; [`Note::author`] does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthorAccount {
+    pub username: String,
+    pub bot: BotStatus,
+}
+
+/// Whether the provider marks an account as automated.
+///
+/// `Unknown` means the capture could not establish it; it is not evidence of
+/// a person.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BotStatus {
+    Bot,
+    NotBot,
+    Unknown,
 }
 
 /// A provider discussion and its supported notes in retained order.
@@ -145,8 +171,8 @@ impl Discussion {
 /// Title, description and supported discussions of one review subject.
 ///
 /// Discussion identifiers are unique, and note identifiers are unique across
-/// all discussions. Structural equality (`==`) also compares retained order;
-/// comparisons use [`Conversation::changes_since`] or the normalized view.
+/// all discussions. Structural equality (`==`) also compares retained order
+/// and account details; comparisons use [`Conversation::changes_since`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Conversation {
     subject: Subject,
@@ -208,9 +234,6 @@ impl Conversation {
     }
 
     /// The same conversation with discussions and their notes ordered by ID.
-    ///
-    /// Two conversations are equivalent exactly when their normalized views are
-    /// equal.
     pub fn normalized(&self) -> Self {
         let mut normalized = self.clone();
         normalized
@@ -226,8 +249,9 @@ impl Conversation {
 
     /// Differences from `retained` to this conversation, in a stable order.
     ///
-    /// An empty result means the normalized views are equal. Note membership
-    /// compares the containing discussion of each note ID.
+    /// An empty result means the conversations are equivalent. Note membership
+    /// compares the containing discussion of each note ID. Account details are
+    /// not compared, so a renamed author or a changed bot status is no change.
     pub fn changes_since(&self, retained: &Self) -> Vec<ConversationChange> {
         let mut changes = Vec::new();
         if self.subject != retained.subject {
@@ -294,7 +318,7 @@ impl Conversation {
         changes
     }
 
-    /// True when the normalized views are equal.
+    /// True when [`Conversation::changes_since`] finds no difference.
     pub fn matches(&self, other: &Self) -> bool {
         self.changes_since(other).is_empty()
     }

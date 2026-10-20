@@ -1,7 +1,10 @@
 use super::super::{MR_PATH, TOKEN};
 use super::{Fault, Request, Response};
 use serde_json::{Value, json};
-use std::{collections::BTreeMap, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    time::Duration,
+};
 
 pub struct State {
     pub server: String,
@@ -26,6 +29,8 @@ pub struct State {
     pub revision_diffs: BTreeMap<String, Vec<Value>>,
     pub revision_files: BTreeMap<String, BTreeMap<String, Vec<u8>>>,
     pub modes: BTreeMap<String, String>,
+    /// User IDs that `GET /users/:id` reports as bots; every other user is not a bot.
+    pub bot_users: BTreeSet<u64>,
     next_note: u64,
 }
 
@@ -67,6 +72,7 @@ impl State {
             revision_diffs: BTreeMap::new(),
             revision_files: BTreeMap::new(),
             modes: BTreeMap::new(),
+            bot_users: BTreeSet::new(),
             next_note: 100,
         }
     }
@@ -105,7 +111,7 @@ impl State {
             seconds / 60 % 60,
             seconds % 60
         );
-        json!({"id":self.next_note,"body":body,"author":{"id":author},"system":false,
+        json!({"id":self.next_note,"body":body,"author":{"id":author,"username":format!("user-{author}")},"system":false,
             "noteable_id":55,"noteable_type":"MergeRequest","project_id":11,"noteable_iid":7,
             "type":null,"position":null,"resolvable":false,"resolved":false,"suggestions":[],
             "created_at":created_at})
@@ -253,6 +259,14 @@ impl State {
         if request.method == "GET" {
             if path == "/user" {
                 return Response::json(json!({"id":self.authenticated_actor}));
+            }
+            if let Some(id) = path
+                .strip_prefix("/users/")
+                .and_then(|id| id.parse::<u64>().ok())
+            {
+                return Response::json(
+                    json!({"id":id,"username":format!("user-{id}"),"bot":self.bot_users.contains(&id)}),
+                );
             }
             if path == "/projects/group/sub/repo" {
                 return Response::json(

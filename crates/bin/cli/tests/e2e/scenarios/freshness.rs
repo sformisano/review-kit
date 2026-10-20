@@ -3,9 +3,10 @@
 //! description edits after capture do not stop publication, which writes only
 //! its planned effects and leaves that activity untouched. A reply in the
 //! reviewer's finding thread or a resolution change there still stops it
-//! before any write.
+//! before any write. The retained capture names each note author and the bot
+//! state that GitLab reports for the account.
 
-use super::super::fixture::{Api, authored_notes};
+use super::super::fixture::{Api, authored_notes, read_json};
 use super::super::{
     assessments,
     fixture::{CliOptions, Fixture},
@@ -287,6 +288,48 @@ pub fn conversation_freshness_scope(mut fixture: Fixture) -> Result<()> {
         &[(1, &question)],
     )?;
     ensure!(answered.started["carried_findings"] == 2);
+    let captured = read_json(answered.dir.join("review-conversation.json"))?;
+    ensure!(captured["version"] == 2, "conversation version");
+    let accounts = [
+        (&fixture.manifest["bot"]["id"], &bot_user["username"], true),
+        (
+            &fixture.manifest["commenter"]["id"],
+            &fixture.manifest["commenter"]["username"],
+            false,
+        ),
+        (
+            &fixture.manifest["author"]["id"],
+            &fixture.manifest["author"]["username"],
+            false,
+        ),
+        (
+            &fixture.manifest["reviewer"]["id"],
+            &fixture.manifest["reviewer"]["username"],
+            false,
+        ),
+    ];
+    let captured_notes: Vec<&Value> = captured["discussions"]
+        .as_array()
+        .context("captured discussions")?
+        .iter()
+        .flat_map(|discussion| discussion["notes"].as_array().into_iter().flatten())
+        .collect();
+    for (id, username, bot) in accounts {
+        let author = id.to_string();
+        let notes: Vec<&&Value> = captured_notes
+            .iter()
+            .filter(|note| note["author"].as_str() == Some(author.as_str()))
+            .collect();
+        ensure!(!notes.is_empty(), "no captured note by {id}");
+        for note in notes {
+            ensure!(
+                note["author_username"] == *username && note["author_bot"] == bot,
+                "author {id} captured as {} / {}",
+                note["author_username"],
+                note["author_bot"]
+            );
+        }
+    }
     bot.post(
         &notes,
         &json!({"body": "Automated review: rerun after the description edit."}),

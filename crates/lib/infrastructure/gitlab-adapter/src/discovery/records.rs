@@ -6,10 +6,22 @@ use serde_json::Value;
 
 use crate::{Binding, GitLabError};
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+/// A note's API author. The numeric ID identifies the account; equality
+/// ignores the username, which can change between two reads.
+#[derive(Debug, Clone, Deserialize)]
 pub(crate) struct Author {
     pub id: u64,
+    #[serde(default)]
+    pub username: Option<String>,
 }
+
+impl PartialEq for Author {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Eq for Author {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub(crate) struct Note {

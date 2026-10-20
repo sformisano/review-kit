@@ -17,6 +17,7 @@ mod source;
 mod wire;
 
 pub use config::{Credential, GitLabConfig, Limits};
+pub use conversation::{BOT_LOOKUP_LIMIT, BotLookup};
 pub use discovery::ManagedRoot;
 pub use error::{FindingConflict, GitLabError};
 pub use identity::{DiscussionId, MergeRequestIid, NoteId, ProjectId, UserId};

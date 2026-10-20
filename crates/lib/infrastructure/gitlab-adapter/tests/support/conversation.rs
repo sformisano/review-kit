@@ -1,12 +1,12 @@
 use super::support::PublicationProgress;
 
 use review_kit_application::{
-    conversation::{Conversation, ConversationChange, Resolution},
+    conversation::{AuthorAccount, BotStatus, Conversation, ConversationChange, Resolution},
     publication::{Effects, ProviderId},
     use_cases::publishing::publish,
 };
 use review_kit_domain::{FindingStatus, Subject};
-use review_kit_gitlab_adapter::{GitLabError, Limits};
+use review_kit_gitlab_adapter::{BOT_LOOKUP_LIMIT, BotLookup, GitLabError, Limits};
 use review_kit_json_adapter::{ConversationDocument, canonical_position, decode, encode};
 use serde_json::{Value, json};
 
@@ -14,7 +14,7 @@ use super::support::{Fault, Fixture, MR_PATH, Renderer, Response, finding, reque
 
 fn capture(fixture: &Fixture) -> Result<Conversation, GitLabError> {
     let client = fixture.connect();
-    client.capture_conversation(client.subject())
+    client.capture_conversation(client.subject(), BotLookup::Resolve)
 }
 
 fn id(value: &str) -> ProviderId {
@@ -238,7 +238,7 @@ fn fresh_captures_detect_conversation_changes_but_not_reordering() {
 #[test]
 fn resolution_and_description_follow_provider_flags() {
     let note = |resolvable: Option<bool>, resolved: Option<bool>| {
-        let mut note = json!({"id":0,"body":"text","author":{"id":77},"system":false,
+        let mut note = json!({"id":0,"body":"text","author":{"id":77,"username":"user-77"},"system":false,
             "noteable_id":55,"noteable_type":"MergeRequest","project_id":11,"noteable_iid":7,
             "type":"DiscussionNote","position":null});
         if let Some(resolvable) = resolvable {
@@ -407,7 +407,9 @@ fn incomplete_pagination_limits_and_protocol_errors_fail_capture() {
         let client = fixture.connect();
         setup(&fixture);
         assert_eq!(
-            client.capture_conversation(client.subject()).unwrap_err(),
+            client
+                .capture_conversation(client.subject(), BotLookup::Resolve)
+                .unwrap_err(),
             expected,
             "{name}"
         );
@@ -430,7 +432,9 @@ fn incomplete_pagination_limits_and_protocol_errors_fail_capture() {
         })
         .unwrap();
     assert_eq!(
-        client.capture_conversation(client.subject()).unwrap_err(),
+        client
+            .capture_conversation(client.subject(), BotLookup::Resolve)
+            .unwrap_err(),
         GitLabError::Limit
     );
     assert!(
@@ -484,14 +488,190 @@ fn notes_outside_the_bound_merge_request_and_other_subjects_are_rejected() {
     .unwrap();
     let before = fixture.state.lock().unwrap().requests.len();
     assert_eq!(
-        client.capture_conversation(&other).unwrap_err(),
+        client
+            .capture_conversation(&other, BotLookup::Resolve)
+            .unwrap_err(),
         GitLabError::Identity
     );
     assert_eq!(fixture.state.lock().unwrap().requests.len(), before);
 
     fixture.state.lock().unwrap().source_project = Some(23);
     assert_eq!(
-        client.capture_conversation(client.subject()).unwrap_err(),
+        client
+            .capture_conversation(client.subject(), BotLookup::Resolve)
+            .unwrap_err(),
         GitLabError::Identity
     );
+}
+
+/// The account of the first note by `author` in `conversation`.
+fn account(conversation: &Conversation, author: &str) -> AuthorAccount {
+    conversation
+        .discussions()
+        .iter()
+        .flat_map(|discussion| discussion.notes())
+        .find(|note| note.author.as_str() == author)
+        .and_then(|note| note.account.clone())
+        .unwrap()
+}
+
+fn user_lookups(fixture: &Fixture) -> Vec<String> {
+    fixture
+        .state
+        .lock()
+        .unwrap()
+        .requests
+        .iter()
+        .filter(|request| request.path.starts_with("/users/"))
+        .map(|request| request.path.clone())
+        .collect()
+}
+
+/// Notes by a person (77, twice), a bot (900), a missing account (901), an
+/// account without a bot flag (902) and a system note author (1).
+fn seed_authors(fixture: &Fixture) {
+    let mut state = fixture.state.lock().unwrap();
+    state.bot_users.insert(900);
+    for (index, author) in [77, 900, 901, 77, 902].into_iter().enumerate() {
+        let note = state.note(&format!("Note {index}"), author);
+        state
+            .discussions
+            .push(thread(&format!("t{index}"), true, vec![note]));
+    }
+    let mut system = state.note("added 1 commit", 1);
+    system["system"] = true.into();
+    state
+        .discussions
+        .push(thread("system-only", true, vec![system]));
+    state
+        .faults
+        .push(Fault::response("GET", "/users/901", Response::status(404)));
+    state.faults.push(Fault::response(
+        "GET",
+        "/users/902",
+        Response::json(json!({"id":902,"username":"user-902"})),
+    ));
+}
+
+// Each note keeps its author's username from the discussion; the bot status
+// comes from one account lookup per distinct author and stays unknown when
+// GitLab does not report it.
+#[test]
+fn note_authors_keep_usernames_and_the_bot_status_gitlab_reports() {
+    let fixture = Fixture::new();
+    seed_authors(&fixture);
+    let conversation = capture(&fixture).unwrap();
+    for (author, bot) in [
+        ("77", BotStatus::NotBot),
+        ("900", BotStatus::Bot),
+        ("901", BotStatus::Unknown),
+        ("902", BotStatus::Unknown),
+    ] {
+        assert_eq!(
+            account(&conversation, author),
+            AuthorAccount {
+                username: format!("user-{author}"),
+                bot
+            },
+            "{author}"
+        );
+    }
+    assert_eq!(
+        user_lookups(&fixture),
+        ["/users/77", "/users/900", "/users/901", "/users/902"],
+        "one lookup per distinct author; system note authors are not asked"
+    );
+    let document = ConversationDocument::new(&conversation, "2026-10-13T12:00:00Z".into()).unwrap();
+    let stored: Value = serde_json::from_slice(&encode(&document).unwrap()).unwrap();
+    let note = &stored["discussions"][1]["notes"][0];
+    assert_eq!(
+        (
+            &note["author"],
+            &note["author_username"],
+            &note["author_bot"]
+        ),
+        (&json!("900"), &json!("user-900"), &json!(true))
+    );
+    assert_eq!(
+        stored["discussions"][2]["notes"][0]["author_bot"],
+        Value::Null
+    );
+}
+
+#[test]
+fn a_failed_account_lookup_stops_further_lookups_and_capture_still_succeeds() {
+    for failure in [Response::status(429), Response::status(500)] {
+        let fixture = Fixture::new();
+        seed_authors(&fixture);
+        fixture
+            .state
+            .lock()
+            .unwrap()
+            .faults
+            .insert(0, Fault::response("GET", "/users/900", failure));
+        let conversation = capture(&fixture).unwrap();
+        assert_eq!(account(&conversation, "77").bot, BotStatus::NotBot);
+        for author in ["900", "901", "902"] {
+            assert_eq!(account(&conversation, author).bot, BotStatus::Unknown);
+        }
+        assert_eq!(user_lookups(&fixture), ["/users/77", "/users/900"]);
+    }
+    let fixture = Fixture::new();
+    {
+        let mut state = fixture.state.lock().unwrap();
+        for author in 0..60 {
+            let note = state.note("Many participants", 1000 + author);
+            state
+                .discussions
+                .push(thread(&format!("p{author}"), true, vec![note]));
+        }
+    }
+    let conversation = capture(&fixture).unwrap();
+    assert_eq!(user_lookups(&fixture).len(), BOT_LOOKUP_LIMIT);
+    let last_asked = (1000 + BOT_LOOKUP_LIMIT - 1).to_string();
+    let first_unasked = (1000 + BOT_LOOKUP_LIMIT).to_string();
+    assert_eq!(account(&conversation, &last_asked).bot, BotStatus::NotBot);
+    assert_eq!(
+        account(&conversation, &first_unasked).bot,
+        BotStatus::Unknown
+    );
+}
+
+#[test]
+fn skipped_lookups_keep_usernames_and_leave_bot_status_unknown() {
+    let fixture = Fixture::new();
+    seed_authors(&fixture);
+    let client = fixture.connect();
+    let conversation = client
+        .capture_conversation(client.subject(), BotLookup::Skip)
+        .unwrap();
+    assert!(user_lookups(&fixture).is_empty());
+    assert_eq!(
+        account(&conversation, "900"),
+        AuthorAccount {
+            username: "user-900".into(),
+            bot: BotStatus::Unknown
+        }
+    );
+    let resolved = capture(&fixture).unwrap();
+    assert_ne!(resolved, conversation);
+    assert_eq!(resolved.changes_since(&conversation), []);
+}
+
+#[test]
+fn a_note_author_without_a_username_fails_capture() {
+    for username in [Value::Null, json!(""), json!(" ")] {
+        let fixture = Fixture::new();
+        {
+            let mut state = fixture.state.lock().unwrap();
+            let mut note = state.note("No username", 77);
+            note["author"]["username"] = username.clone();
+            state.discussions.push(thread("t", true, vec![note]));
+        }
+        assert_eq!(
+            capture(&fixture).unwrap_err(),
+            GitLabError::Protocol,
+            "{username}"
+        );
+    }
 }

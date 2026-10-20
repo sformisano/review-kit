@@ -93,7 +93,9 @@ adds a Developer commenter and a project access token bot user. After each
 capture they post notes, start, reply in and resolve a diff thread, copy Review
 Kit markers into their notes, and the author edits the title and description.
 Publication still completes with exactly its planned effects, and independent
-REST reads show every foreign note unchanged. A reply or a resolution change in
+REST reads show every foreign note unchanged. The retained
+`review-conversation.json` names each author's username, with `author_bot`
+`true` for the bot and `false` for the people. A reply or a resolution change in
 the reviewer's own threads refuses planning and publication with
 `conversation_changed` and writes nothing.
 

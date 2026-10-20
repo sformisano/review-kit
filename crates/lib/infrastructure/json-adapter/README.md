@@ -22,34 +22,43 @@ Core validation also checks declared policy coverage, assessment consistency, an
 | `ContextDocument` | `context` | `bundle()` reconstructs and validates discovery through application use cases |
 | `DraftDocument` | `assessment` | `complete()` validates context and agent-declared coverage, then completes the assessment |
 | `ProgressDocument` | `progress` | `into_progress()` restores versions 1 and 2 and `into_journal()` restores version 3; both validate subject and reviewer binding and restore exact write intent |
-| `ConversationDocument` | `review_conversation` | `into_conversation()` validates structure and identifiers and restores the [supported conversation](#supported-conversation) |
+| `ConversationDocument` | `review_conversation` | `into_conversation()` validates structure and identifiers and restores the [supported conversation](#supported-conversation), version 2 or 1 |
 
 The [examples](examples/) contain empty discovery context, unassessed draft, and empty publication progress.
 Their host, reviewer, and revision values are synthetic.
 
 ### Supported conversation
 
-`ConversationDocument` retains a captured application `Conversation` as version 1.
-Its [schema](schemas/review-conversation-v1.schema.json) describes the structure.
+`ConversationDocument` retains a captured application `Conversation`.
+`ConversationDocument::new(&conversation, observed_at)` writes version 2
+(`CONVERSATION_VERSION`), described by the
+[version 2 schema](schemas/review-conversation-v2.schema.json). `into_conversation()`
+also reads version 1, described by the [version 1 schema](schemas/review-conversation-v1.schema.json).
 The document holds the subject, the caller's `observed_at` capture time, the
-title, the description and the discussions in captured order.
+title, the description and the discussions in captured order. The
+[CLI guide](../../../bin/cli/README.md#captured-conversation) defines each field's
+meaning for review agents.
 
-`ConversationDocument::new(&conversation, observed_at)` requires an RFC 3339 UTC
-time in the form `YYYY-MM-DDTHH:MM:SS[.fraction]Z`. Each position is written as
-the provider's JSON object.
+`ConversationDocument::new` requires an RFC 3339 UTC time in the form
+`YYYY-MM-DDTHH:MM:SS[.fraction]Z` and every note's author account. Each
+position is written as the provider's JSON object.
 
 `into_conversation()` rejects unknown fields, other versions and kinds.
 Every discussion needs `resolved` and every note needs `position`; either can be
 `null`. `resolved` is `null` exactly when `resolvable` is false. IDs and authors
 are nonblank, each discussion has a note, and discussion and note IDs are
-unique across the document.
+unique across the document. A version 2 note also needs a nonblank
+`author_username` and an `author_bot` of `true`, `false` or `null`, which restore
+as `BotStatus::Bot`, `NotBot` and `Unknown`. A version 1 note has neither field
+and restores without an account (`Note::account` is `None`). A version 1
+conversation cannot be written again as version 2.
 
 `canonical_position` converts a position object to canonical text: keys sorted
 by byte order at every depth, serde_json scalar formatting and no whitespace.
 Reading a document and capturing from GitLab both use it, so key order and
 spacing in the file do not affect comparison; every key and value does.
-`observed_at` and the stored order are not part of the application model, and
-`Conversation::changes_since` ignores both.
+`observed_at`, the stored order and author accounts are not part of the
+comparison, and `Conversation::changes_since` ignores all three.
 The conversation is review context. It carries no managed finding identity and
 no reply, answer, policy or effect authority.
 
@@ -284,6 +293,6 @@ Business values and serialized documents retain their existing contents.
 
 Run the workspace checks in the [domain README](../../domain/README.md#verification).
 Focused fixtures cover unassessed drafts, agent-declared coverage, private context, strict decoding, and exact progress restoration.
-[Conversation tests](tests/conversation.rs) validate example documents and written documents against the schema.
+[Conversation tests](tests/conversation.rs) validate version 1 and version 2 documents and written documents against their schemas.
 They also cover verbatim position round trips, canonical positions, freshness differences and strict decoding.
 [Review document tests](tests/checkpoints.rs) cover current fixtures, generated drafts, completion and revision.

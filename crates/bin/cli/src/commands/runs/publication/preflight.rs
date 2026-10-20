@@ -7,7 +7,7 @@ use review_kit_application::{
         publishing::{ManagedHistory, OwnedHistory},
     },
 };
-use review_kit_gitlab_adapter::GitLab;
+use review_kit_gitlab_adapter::{BotLookup, GitLab};
 use serde_json::{Value, json};
 
 use crate::{
@@ -67,7 +67,7 @@ pub fn require_fresh(
         })));
     }
     let current = gitlab
-        .capture_conversation(subject)
+        .capture_conversation(subject, BotLookup::Skip)
         .map_err(CliError::GitLab)?;
     let captured = run.context.snapshot.clone().into_snapshot()?;
     let owned = OwnedThreads::of([&captured, snapshot]);

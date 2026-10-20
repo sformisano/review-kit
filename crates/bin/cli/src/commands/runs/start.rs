@@ -6,7 +6,7 @@ use review_kit_application::{
 };
 use review_kit_domain::{FindingId, ReviewerId, Subject};
 use review_kit_filesystem_adapter::{RunFile, SnapshotFile, WorkingFile, WorkspaceLock};
-use review_kit_gitlab_adapter::GitLab;
+use review_kit_gitlab_adapter::{BotLookup, GitLab};
 use review_kit_json_adapter::{
     ContextDocument, ConversationDocument,
     checkpoints::{
@@ -187,7 +187,7 @@ fn capture(gitlab: &GitLab) -> Result<Captured, CliError> {
         .capture_source(gitlab.subject(), &revision)
         .map_err(CliError::GitLab)?;
     let conversation = gitlab
-        .capture_conversation(gitlab.subject())
+        .capture_conversation(gitlab.subject(), BotLookup::Resolve)
         .map_err(CliError::GitLab)?;
     let context = ContextDocument::new(bundle.snapshot(), bundle.changes());
     let conversation = ConversationDocument::new(&conversation, utc_now()?.as_str().to_owned())?;

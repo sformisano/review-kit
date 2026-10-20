@@ -19,6 +19,10 @@ fn note(
     Ok(Note {
         id: id(note)?,
         author: ReviewerId::try_from(author.to_owned())?,
+        account: Some(AuthorAccount {
+            username: format!("user-{author}"),
+            bot: BotStatus::NotBot,
+        }),
         body: body.into(),
         position: position
             .map(|text| Position::from_canonical_json(text.into()))
@@ -536,6 +540,42 @@ fn without_owned_threads_only_a_different_subject_is_reported() -> TestResult {
     assert_eq!(
         other.owned_changes_since(&retained, &none),
         [ConversationChange::Subject]
+    );
+    Ok(())
+}
+
+#[test]
+fn author_accounts_are_context_and_never_a_change() -> TestResult {
+    let (retained, owned) = reviewed()?;
+    let current = rebuild(&retained, |parts| {
+        for (_, _, notes) in parts.iter_mut() {
+            for note in notes.iter_mut() {
+                note.account = match note.id.as_str() {
+                    "200" => Some(AuthorAccount {
+                        username: "renamed-reviewer".into(),
+                        bot: BotStatus::Unknown,
+                    }),
+                    "201" => None,
+                    _ => Some(AuthorAccount {
+                        username: "renamed".into(),
+                        bot: BotStatus::Bot,
+                    }),
+                };
+            }
+        }
+        Ok(())
+    })?;
+    assert_ne!(current, retained);
+    assert_eq!(current.changes_since(&retained), []);
+    assert!(current.matches(&retained));
+    assert_eq!(current.owned_changes_since(&retained, &owned), []);
+    let reassigned = rebuild(&retained, |parts| {
+        parts[1].2[1].author = ReviewerId::try_from("6".to_owned())?;
+        Ok(())
+    })?;
+    assert_eq!(
+        reassigned.owned_changes_since(&retained, &owned),
+        [ConversationChange::NoteAuthorChanged(id("201")?)]
     );
     Ok(())
 }

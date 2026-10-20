@@ -154,6 +154,11 @@ defines continuation limits. The [CLI reference](../crates/bin/cli/README.md#pro
   Comparing the whole conversation is rejected: a later comment by another person or a bot then stops publication
   and forces a fresh assessment, which can reverse confirmed findings.
   Publication communicates the assessed snapshot, not later events.
+- Retain each captured note author's username and the provider's bot status beside the numeric author ID,
+  so review agents can tell bots such as GitLab Duo from people, also inside the reviewer's own threads.
+  Write the conversation as version 2 and keep reading version 1, whose authors have no account details.
+  Ask GitLab for the bot status once per distinct author, within a fixed bound, and record an unknown status
+  rather than a guess when GitLab does not answer. Compare authors by numeric ID only: usernames can change.
 - Bind publication to one run in journal version 3, `publication-progress.json`.
   The binding names the run's accepted assessment and captured-file hashes and is installed with the first prepared write.
   A dispatch flag is set before the first request could leave.

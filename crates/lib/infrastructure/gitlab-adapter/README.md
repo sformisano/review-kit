@@ -248,7 +248,7 @@ cargo test -p review-kit-gitlab-adapter --test http_workflow source::
 
 ## Conversation capture
 
-`GitLab::capture_conversation(subject)` returns the application `Conversation`
+`GitLab::capture_conversation(subject, lookup)` returns the application `Conversation`
 for the bound MR. It checks the subject, refreshes and corroborates the MR
 identity, and reads the title and description. A `null` description becomes
 empty text; an absent title or description fails capture. It then reads
@@ -257,8 +257,9 @@ a failed page or an exhausted page limit fails capture without a partial result.
 
 Every discussion with at least one non-system note is kept, including notes by
 bot users. System notes are omitted, and so is a discussion that contains only
-system notes. Each note keeps its ID, numeric author ID as text, body and
-verbatim `position` object, or no position. Every note in a discussion passes
+system notes. Each note keeps its ID, numeric author ID as text, the author's
+username, the author's bot status, body and verbatim `position` object, or no
+position. A note author without a nonblank username fails capture. Every note in a discussion passes
 the discovery scope check: target project, MR, noteable type and IID, and
 nonzero note and author IDs. Duplicate discussion or note IDs, empty
 discussions, non-object positions and notes without `resolvable` fail capture.
@@ -270,14 +271,48 @@ Positions become canonical text through the JSON adapter's
 [`canonical_position`](../json-adapter/README.md#supported-conversation), which
 retained conversation documents also use. Publication freshness follows the
 [application conversation model](../../application/README.md#conversation-context-and-freshness):
-it compares only the threads that discovery verifies as the reviewer's.
+it compares only the threads that discovery verifies as the reviewer's, and it
+identifies note authors by numeric ID only.
 
 The MR read and the discussion pages are separate requests, not an atomic
 provider snapshot. A change that lands during capture can appear only in a
 later capture. The conversation is context: capture parses no markers, verifies
 no ownership, establishes no managed finding identity and grants no reply,
-answer, policy or effect authority. Discovery remains the only source of managed
-review state. Capture makes no writes.
+answer, policy or effect authority. A bot status is context too; it grants or
+removes no authority. Discovery remains the only source of managed review
+state. Capture makes no writes.
+
+### Note author accounts
+
+The note `author` object in discussion responses is GitLab's basic user entity:
+`id`, `username`, `name`, `state`, `locked`, `public_email`, `avatar_url` and
+`web_url`. It has no bot indicator or user type. Capture keeps `id` and
+`username` only. `GET /users/:id` returns `bot`, which GitLab sets for every
+bot user type. Project and group access tokens create `project_bot` users named
+`<project or group>_<ID>_bot_<hex>`; service accounts and internal users such
+as GitLab Duo are bot types too. `GET /users/:id` does not return the user type
+to an ordinary token.
+
+With `BotLookup::Resolve`, capture asks `GET /users/:id` once for each distinct
+non-system note author, in discussion order, for at most `BOT_LOOKUP_LIMIT` (50)
+authors. A response for that user with a boolean `bot` sets `Bot` or `NotBot`.
+Every other result leaves the author `Unknown`. A missing, hidden or malformed
+account affects only that author. Any other failure, such as a rate limit,
+transport loss or a server error, stops the lookups, and the remaining authors
+stay `Unknown`. A lookup never fails capture. Freshness ignores accounts, so the
+publication preflight captures with `BotLookup::Skip`, which sends no lookup
+and leaves every bot status `Unknown`.
+
+Verified against the pinned CE 19.3.3 server: Developer tokens with `api` or
+`read_api` scope read `bot` for a project access token bot (`true`, shown in
+notes with a masked name), for humans and for the administrator (`false`).
+The `api` token also reads `true` for the private-profile `GitLabDuo` user and
+`false` for the deleted-user placeholder `ghost`. GitLab rate limits `GET /users/:id` for non-administrators, by default
+300 requests per user every 10 minutes. In the 19.3.3 source, GitLab Duo Code
+Review writes as the internal user `GitLabDuo` (name `GitLab Duo`, user type
+`duo_code_review_bot`, private profile), which is a bot type, and this server's
+`GitLabDuo` user reports `true`. Duo comments on GitLab.com and other
+deployments are not verified.
 
 ## Publication and uncertain writes
 
@@ -340,7 +375,8 @@ Additional HTTP regressions cover quick actions, extra reply suggestions,
 provider-tracked positions after pushes and question edits between application
 and adapter reads.
 [Conversation tests](tests/support/conversation.rs) cover discussions beyond
-page one, system-note exclusion, bot and owned notes, verbatim inline positions,
+page one, system-note exclusion, bot and owned notes, author usernames and bot
+lookups with their limit and failures, verbatim inline positions,
 resolution mapping, freshness differences, pagination and protocol failures,
 and notes outside the bound MR.
 Observation regressions inspect emitted JSON, correlation, redaction, rejected and uncertain writes, and publication with a failed log writer.

@@ -1,13 +1,17 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    collections::BTreeMap,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use reqwest::Method;
 use review_kit_application::{
-    conversation::{ConversationChange, OwnedThreads, Resolution},
+    conversation::{BotStatus, ConversationChange, OwnedThreads, Resolution},
     ports::ReviewReader,
     publication::{Effects, ProviderId},
     use_cases::publishing::{PublicationProgress, PublicationStatus, publish},
 };
 use review_kit_domain::FindingStatus;
+use review_kit_gitlab_adapter::BotLookup;
 use review_kit_json_adapter::{ConversationDocument, encode};
 use serde_json::{Value, json};
 
@@ -42,9 +46,26 @@ fn date_after(days: u64) -> String {
     format!("{year:04}-{month:02}-{day:02}")
 }
 
-/// The supported conversation derived directly from raw REST discussions,
-/// without adapter code.
-fn expected_discussions(discussions: &[Value]) -> Vec<Value> {
+/// Each distinct non-system note author's `bot` flag from an administrator's
+/// independent `GET /users/:id`.
+fn bot_flags(fixture: &Fixture, discussions: &[Value]) -> BTreeMap<u64, Value> {
+    let mut flags = BTreeMap::new();
+    for note in discussions
+        .iter()
+        .flat_map(|discussion| discussion["notes"].as_array().unwrap())
+        .filter(|note| note["system"] == false)
+    {
+        let author = note["author"]["id"].as_u64().unwrap();
+        flags
+            .entry(author)
+            .or_insert_with(|| fixture.admin.get(&format!("users/{author}"))["bot"].clone());
+    }
+    flags
+}
+
+/// The supported conversation derived directly from raw REST discussions and
+/// independent account reads, without adapter code.
+fn expected_discussions(discussions: &[Value], bots: &BTreeMap<u64, Value>) -> Vec<Value> {
     let mut expected: Vec<Value> = discussions
         .iter()
         .filter_map(|discussion| {
@@ -53,9 +74,12 @@ fn expected_discussions(discussions: &[Value]) -> Vec<Value> {
                 .iter()
                 .filter(|note| note["system"] == false)
                 .map(|note| {
+                    let author = note["author"]["id"].as_u64().unwrap();
                     json!({
                         "id": note["id"].as_u64().unwrap().to_string(),
-                        "author": note["author"]["id"].as_u64().unwrap().to_string(),
+                        "author": author.to_string(),
+                        "author_username": note["author"]["username"],
+                        "author_bot": bots[&author],
                         "body": note["body"],
                         "position": note.get("position").cloned().unwrap_or(Value::Null),
                     })
@@ -192,7 +216,9 @@ pub fn conversation_capture_matches_independent_rest_reads(service: &GitLabServi
     filler(&fixture, 101..202);
 
     let client = fixture.connect();
-    let captured = client.capture_conversation(client.subject()).unwrap();
+    let captured = client
+        .capture_conversation(client.subject(), BotLookup::Resolve)
+        .unwrap();
     let raw = fixture.discussions();
     let request = fixture.admin.get(&path);
 
@@ -231,7 +257,12 @@ pub fn conversation_capture_matches_independent_rest_reads(service: &GitLabServi
     let document = ConversationDocument::new(&captured, "2026-10-13T12:00:00Z".into()).unwrap();
     let document: Value = serde_json::from_slice(&encode(&document).unwrap()).unwrap();
     let stored = sorted(document["discussions"].as_array().unwrap().clone());
-    assert_eq!(stored, expected_discussions(&raw));
+    let bots = bot_flags(&fixture, &raw);
+    assert!(
+        bots.values().all(Value::is_boolean),
+        "GitLab reports every author's bot flag"
+    );
+    assert_eq!(stored, expected_discussions(&raw, &bots));
     assert_eq!(
         stored.len() + system_only,
         raw.len(),
@@ -249,6 +280,10 @@ pub fn conversation_capture_matches_independent_rest_reads(service: &GitLabServi
     assert_eq!(inline.resolution(), Resolution::Unresolved);
     assert_eq!(inline.notes().len(), 2);
     assert_eq!(inline.notes()[0].author.as_str(), commenter.id.to_string());
+    let person = inline.notes()[0].account.as_ref().unwrap();
+    let user = fixture.admin.get(&format!("users/{}", commenter.id));
+    assert_eq!(person.username, user["username"].as_str().unwrap());
+    assert_eq!(person.bot, BotStatus::NotBot);
     let raw_position = raw
         .iter()
         .find(|discussion| discussion["id"] == inline_id.as_str())
@@ -290,6 +325,9 @@ pub fn conversation_capture_matches_independent_rest_reads(service: &GitLabServi
                 "Bot note author: bot={} username={}",
                 user["bot"], user["username"]
             );
+            let account = observed.account.as_ref().unwrap();
+            assert_eq!(account.username, user["username"].as_str().unwrap());
+            assert_eq!(account.bot, BotStatus::Bot);
         }
         _ => println!("Bot note skipped: project access tokens are unavailable"),
     }
@@ -305,7 +343,9 @@ pub fn conversation_capture_matches_independent_rest_reads(service: &GitLabServi
         &format!("{threads}/{thread_id}"),
         json!({"resolved":false}),
     );
-    let fresh = client.capture_conversation(client.subject()).unwrap();
+    let fresh = client
+        .capture_conversation(client.subject(), BotLookup::Resolve)
+        .unwrap();
     assert_eq!(
         fresh.changes_since(&captured),
         [
@@ -342,7 +382,9 @@ pub fn owned_thread_scope_follows_verified_discovery(service: &GitLabService) {
     .unwrap();
     assert_eq!(published.status, PublicationStatus::Completed);
     let captured_history = client.clone().discover(client.subject()).unwrap();
-    let captured = client.capture_conversation(client.subject()).unwrap();
+    let captured = client
+        .capture_conversation(client.subject(), BotLookup::Resolve)
+        .unwrap();
     let root = captured_history.findings[0].id.clone();
 
     let path = fixture.mr_path();
@@ -382,7 +424,9 @@ pub fn owned_thread_scope_follows_verified_discovery(service: &GitLabService) {
         1,
         "a copied finding marker is not an owned root"
     );
-    let current = client.capture_conversation(client.subject()).unwrap();
+    let current = client
+        .capture_conversation(client.subject(), BotLookup::Resolve)
+        .unwrap();
     let owned = OwnedThreads::of([&captured_history, &current_history]);
     assert!(current.changes_since(&captured).len() >= 5);
     assert_eq!(current.owned_changes_since(&captured, &owned), []);
@@ -397,7 +441,9 @@ pub fn owned_thread_scope_follows_verified_discovery(service: &GitLabService) {
         json!({"resolved":true}),
     );
     let current_history = client.clone().discover(client.subject()).unwrap();
-    let current = client.capture_conversation(client.subject()).unwrap();
+    let current = client
+        .capture_conversation(client.subject(), BotLookup::Resolve)
+        .unwrap();
     let owned = OwnedThreads::of([&captured_history, &current_history]);
     assert_eq!(
         current.owned_changes_since(&captured, &owned),

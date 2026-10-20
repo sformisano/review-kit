@@ -3,7 +3,8 @@
 //! that claims the same finding is not.
 
 use review_kit_application::conversation::{
-    Conversation, ConversationChange, Discussion, Note, OwnedThreads, Resolution,
+    AuthorAccount, BotStatus, Conversation, ConversationChange, Discussion, Note, OwnedThreads,
+    Resolution,
 };
 
 use super::*;
@@ -12,6 +13,14 @@ fn note(id: &str, author: &str, body: &str) -> Note {
     Note {
         id: provider_id(id),
         author: reviewer(author),
+        account: Some(AuthorAccount {
+            username: author.into(),
+            bot: if author == "bot" {
+                BotStatus::Bot
+            } else {
+                BotStatus::NotBot
+            },
+        }),
         body: body.into(),
         position: None,
     }

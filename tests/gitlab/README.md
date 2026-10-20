@@ -120,7 +120,8 @@ The scenarios verify:
   beyond the first notes/discussions page.
 - Conversation capture beyond the first discussions page. General, project
   bot, unmanaged inline and resolvable thread notes match independent REST
-  reads, with verbatim positions. System notes are excluded. Edited and
+  reads, with verbatim positions and each author's username and `bot` flag
+  from independent account reads. System notes are excluded. Edited and
   deleted notes are reflected. A later edit and resolution change are
   reported as differences from the capture.
 - Publication freshness scoped to the reviewer's threads with real discovery.

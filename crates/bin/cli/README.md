@@ -274,7 +274,7 @@ uses it; nothing is read or written through the link.
 | `review-runs/<run-id>/review-context.json` | rkc capture | Comparison, verified managed history and observed permissions |
 | `review-runs/<run-id>/reviewed-source.json` | rkc capture | Provider diff data and committed file contents |
 | `review-runs/<run-id>/merge-request.diff` | rkc capture | Readable unified diff |
-| `review-runs/<run-id>/review-conversation.json` | rkc capture | Title, description and supported discussions, as review context |
+| `review-runs/<run-id>/review-conversation.json` | rkc capture | Title, description and supported discussions, as review context; see [captured conversation](#captured-conversation) |
 | `review-runs/<run-id>/review-assessment.draft.json` | rkc, then the agent | [Assessment](#assessment-editing) draft |
 | `review-runs/<run-id>/accepted/<hex>/review-assessment.json` | rkc | Frozen accepted bytes |
 | `review-runs/<run-id>/draft-history/<hex>/<draft file>` | rkc | Exact draft bytes archived by `revise` |
@@ -298,6 +298,61 @@ synchronized. A new run is written completely under `staging/` and renamed into
 holds the workspace lock; a competing command fails with `workspace_busy`.
 `status` and `run list` take no lock. A command reads the
 selected run once and works on that run until it ends.
+
+### Captured conversation
+
+`review-conversation.json` holds the merge-request conversation as `run start`
+captured it. It is review context for the agent: it grants no finding identity,
+reply authority or effect authority. rkc never rewrites it. rkc writes version 2.
+Runs captured by rkc 0.1.0 keep version 1, which has no `author_username` or
+`author_bot` field; rkc still reads them.
+
+| Field | Meaning |
+| --- | --- |
+| `version` | `2`, or `1` in a run captured by rkc 0.1.0 |
+| `kind` | `"review_conversation"` |
+| `subject` | Provider, host, repository and merge-request number |
+| `observed_at` | Capture time in UTC, for example `2026-10-20T08:15:00Z` |
+| `title`, `description` | Merge-request text at capture; a missing description is `""` |
+| `discussions[].id` | GitLab discussion ID |
+| `discussions[].resolvable` | `true` when any note of the discussion is resolvable |
+| `discussions[].resolved` | `true` when every resolvable note is resolved; `null` when the discussion is not resolvable |
+| `discussions[].notes[].id` | GitLab note ID |
+| `discussions[].notes[].author` | The author's numeric GitLab user ID, as text. This value identifies the account |
+| `discussions[].notes[].author_username` | The author's GitLab username at capture time. A username can change; `author` does not |
+| `discussions[].notes[].author_bot` | `true` when GitLab marks the account as a bot, `false` when GitLab reports a non-bot account, `null` when unknown |
+| `discussions[].notes[].body` | The note's Markdown as GitLab stores it |
+| `discussions[].notes[].position` | GitLab's diff position object, or `null` for a note without a diff anchor |
+
+GitLab marks project and group access token bots, service accounts and internal
+users such as GitLab Duo (`GitLabDuo`) as bots. `author_bot: null` means GitLab
+did not say, for example because the account lookup was refused, failed, hit a
+rate limit or exceeded the 50-author limit of one capture. Treat it as unknown,
+never as a person. `false` reports GitLab's account type only; it does not prove
+that a person wrote the note. The
+[GitLab adapter](../../lib/infrastructure/gitlab-adapter/README.md#note-author-accounts)
+describes the lookups.
+
+Account details never change publication rules. Inside the reviewer's own
+threads a bot's note blocks like anyone else's, and the
+[freshness preflight](#publication-and-recovery) compares authors by `author`
+only, so a renamed account or a changed bot status never blocks publication.
+System notes are not captured. The
+[JSON adapter](../../lib/infrastructure/json-adapter/README.md#supported-conversation)
+owns the schema and validation.
+
+A note by a project access token bot:
+
+```json
+{
+  "id": "7153",
+  "author": "887",
+  "author_username": "project_530_bot_6a3146a46d5bfcc4972cab1aeb91619b",
+  "author_bot": true,
+  "body": "Automated review: no blocking issues detected (edited).",
+  "position": null
+}
+```
 
 ### Assessment acceptance
 

@@ -2,7 +2,9 @@ use crate::observation::json_error;
 use review_kit_observation::{Completion, Fields};
 
 use review_kit_application::{
-    conversation::{Conversation, Discussion, Note, Position, Resolution},
+    conversation::{
+        AuthorAccount, BotStatus, Conversation, Discussion, Note, Position, Resolution,
+    },
     publication::ProviderId,
 };
 use review_kit_domain::ReviewerId;
@@ -12,12 +14,17 @@ use serde_json::{Map, Value};
 use crate::{
     JsonError,
     domain::{SubjectData, valid},
-    validate_version,
 };
 
 document_kind!(ConversationKind, ReviewConversation, "review_conversation");
 
+/// The conversation version that [`ConversationDocument::new`] writes.
+pub const CONVERSATION_VERSION: u64 = 2;
+
 /// Retained supported merge-request conversation.
+///
+/// Version 2 adds each note author's account. Version 1 documents remain
+/// readable; their notes restore without account details.
 ///
 /// `observed_at` is the caller's RFC 3339 UTC capture time. It is not part of
 /// the application model and never participates in freshness comparison.
@@ -48,7 +55,20 @@ pub struct ConversationDiscussionData {
 #[serde(deny_unknown_fields)]
 pub struct ConversationNoteData {
     pub id: String,
+    /// Provider user ID of the API author; the identity that comparisons use.
     pub author: String,
+    /// The author's provider username. Required in version 2, absent in version 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author_username: Option<String>,
+    /// `true` when the provider marks the author as a bot, `false` when it
+    /// does not and `null` when unknown. Required in version 2, absent in
+    /// version 1; the outer `None` means absent.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "present"
+    )]
+    pub author_bot: Option<Option<bool>>,
     pub body: String,
     /// The provider position object, or `null` for a note without an anchor.
     /// Every key and value is retained; key order and spacing are not significant.
@@ -58,13 +78,16 @@ pub struct ConversationNoteData {
 
 #[review_kit_observation::operations]
 impl ConversationDocument {
-    /// Version 1 document for `conversation` captured at `observed_at`, an
+    /// Version 2 document for `conversation` captured at `observed_at`, an
     /// RFC 3339 UTC time such as `2026-10-13T12:00:00Z`.
+    ///
+    /// Every note needs its author's account; a conversation restored from a
+    /// version 1 document has none and is rejected.
     #[helper]
     pub fn new(conversation: &Conversation, observed_at: String) -> Result<Self, JsonError> {
         validate_observed_at(&observed_at)?;
         Ok(Self {
-            version: 1,
+            version: CONVERSATION_VERSION,
             kind: ConversationKind::ReviewConversation,
             subject: conversation.subject().into(),
             observed_at,
@@ -92,13 +115,17 @@ impl ConversationDocument {
         },
     )]
     pub fn into_conversation(self) -> Result<Conversation, JsonError> {
-        validate_version(self.version)?;
+        let accounts = match self.version {
+            1 => Accounts::Absent,
+            CONVERSATION_VERSION => Accounts::Required,
+            other => return Err(JsonError::Version(other)),
+        };
         validate_observed_at(&self.observed_at)?;
         let subject = self.subject.into_subject()?;
         let discussions = self
             .discussions
             .into_iter()
-            .map(ConversationDiscussionData::into_discussion)
+            .map(|discussion| discussion.into_discussion(accounts))
             .collect::<Result<_, _>>()?;
         valid(Conversation::new(
             subject,
@@ -126,11 +153,11 @@ impl ConversationDiscussionData {
     }
 
     #[helper]
-    fn into_discussion(self) -> Result<Discussion, JsonError> {
+    fn into_discussion(self, accounts: Accounts) -> Result<Discussion, JsonError> {
         let notes = self
             .notes
             .into_iter()
-            .map(ConversationNoteData::into_note)
+            .map(|note| note.into_note(accounts))
             .collect::<Result<_, _>>()?;
         valid(Discussion::new(
             valid(ProviderId::new(self.id))?,
@@ -144,9 +171,16 @@ impl ConversationDiscussionData {
 impl ConversationNoteData {
     #[helper]
     fn from_note(note: &Note) -> Result<Self, JsonError> {
+        let account = note.account.as_ref().ok_or(JsonError::InvalidValue)?;
         Ok(Self {
             id: note.id.as_str().into(),
             author: note.author.as_str().into(),
+            author_username: Some(account.username.clone()),
+            author_bot: Some(match account.bot {
+                BotStatus::Bot => Some(true),
+                BotStatus::NotBot => Some(false),
+                BotStatus::Unknown => None,
+            }),
             body: note.body.clone(),
             position: note
                 .position
@@ -158,14 +192,38 @@ impl ConversationNoteData {
     }
 
     #[helper]
-    fn into_note(self) -> Result<Note, JsonError> {
+    fn into_note(self, accounts: Accounts) -> Result<Note, JsonError> {
+        let account = match (accounts, self.author_username, self.author_bot) {
+            (Accounts::Absent, None, None) => None,
+            (Accounts::Required, Some(username), Some(bot)) if !username.trim().is_empty() => {
+                Some(AuthorAccount {
+                    username,
+                    bot: match bot {
+                        Some(true) => BotStatus::Bot,
+                        Some(false) => BotStatus::NotBot,
+                        None => BotStatus::Unknown,
+                    },
+                })
+            }
+            _ => return Err(JsonError::InvalidValue),
+        };
         Ok(Note {
             id: valid(ProviderId::new(self.id))?,
             author: valid(ReviewerId::try_from(self.author))?,
+            account,
             body: self.body,
             position: self.position.as_ref().map(canonical_position).transpose()?,
         })
     }
+}
+
+/// Whether a document version carries note author accounts.
+#[derive(Debug, Clone, Copy)]
+enum Accounts {
+    /// Version 1: no note has account fields.
+    Absent,
+    /// Version 2: every note has a username and a bot state.
+    Required,
 }
 
 /// Canonical text of a provider position object for freshness comparison.
@@ -255,6 +313,15 @@ fn validate_observed_at(text: &str) -> Result<(), JsonError> {
     } else {
         Err(JsonError::InvalidValue)
     }
+}
+
+/// Distinguishes a present `null` (`Some(None)`) from an absent field (`None`).
+#[review_kit_observation::operations]
+#[helper]
+fn present<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
+    deserializer: D,
+) -> Result<Option<Option<T>>, D::Error> {
+    Option::<T>::deserialize(deserializer).map(Some)
 }
 
 /// Makes an `Option` field required while still accepting `null`.

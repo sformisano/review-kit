@@ -1,15 +1,20 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use review_kit_application::{
-    conversation::{Conversation, ConversationChange, Discussion, Note, Position, Resolution},
+    conversation::{
+        AuthorAccount, BotStatus, Conversation, ConversationChange, Discussion, Note, Position,
+        Resolution,
+    },
     publication::ProviderId,
 };
 use review_kit_domain::{ReviewerId, Subject};
-use review_kit_json_adapter::{ConversationDocument, canonical_position, decode, encode};
+use review_kit_json_adapter::{
+    CONVERSATION_VERSION, ConversationDocument, JsonError, canonical_position, decode, encode,
+};
 use serde_json::{Map, Value, json};
 
-// Packet examples 01, 02, 04 and 06 verbatim. Examples 03, 05, 07 and 08 are
-// byte-identical to 02.
+// Version 1 packet examples 01, 02, 04 and 06 verbatim, as rkc 0.1.0 wrote
+// them. Examples 03, 05, 07 and 08 are byte-identical to 02.
 const INITIAL_REVIEW: &str = r#"{
   "version": 1,
   "kind": "review_conversation",
@@ -240,12 +245,47 @@ const FOLLOW_UP_QUESTION: &str = r#"{
   ]
 }"#;
 
-fn schema() -> jsonschema::Validator {
-    let text = include_str!("../schemas/review-conversation-v1.schema.json");
+const VERSION_1_SCHEMA: &str = include_str!("../schemas/review-conversation-v1.schema.json");
+const VERSION_2_SCHEMA: &str = include_str!("../schemas/review-conversation-v2.schema.json");
+
+fn schema_for(text: &str) -> jsonschema::Validator {
     jsonschema::options()
         .should_validate_formats(true)
         .build(&serde_json::from_str(text).unwrap())
         .unwrap()
+}
+
+/// The schema of the version that rkc writes.
+fn schema() -> jsonschema::Validator {
+    assert_eq!(CONVERSATION_VERSION, 2);
+    schema_for(VERSION_2_SCHEMA)
+}
+
+/// The account fields that a version 2 capture adds to a version 1 example:
+/// author `9` is a bot, author `10` a person and any other author unknown.
+fn upgraded(text: &str) -> Value {
+    let mut value: Value = serde_json::from_str(text).unwrap();
+    value["version"] = 2.into();
+    for discussion in value["discussions"].as_array_mut().unwrap() {
+        for note in discussion["notes"].as_array_mut().unwrap() {
+            let author = note["author"].as_str().unwrap().to_owned();
+            let (username, bot) = match author.as_str() {
+                "9" => ("review-bot", json!(true)),
+                "10" => ("author-10", json!(false)),
+                _ => ("someone", Value::Null),
+            };
+            let mut ordered = Map::new();
+            for (key, field) in note.as_object().unwrap() {
+                ordered.insert(key.clone(), field.clone());
+                if key == "author" {
+                    ordered.insert("author_username".into(), username.into());
+                    ordered.insert("author_bot".into(), bot.clone());
+                }
+            }
+            *note = Value::Object(ordered);
+        }
+    }
+    value
 }
 
 fn restore(value: &Value) -> Result<Conversation, review_kit_json_adapter::JsonError> {
@@ -262,8 +302,67 @@ fn id(value: &str) -> ProviderId {
 }
 
 #[test]
-fn packet_examples_satisfy_the_schema_and_round_trip_exactly() {
+fn version_2_documents_satisfy_the_schema_and_round_trip_exactly() {
     let schema = schema();
+    let earlier = schema_for(VERSION_1_SCHEMA);
+    for text in [
+        INITIAL_REVIEW,
+        FOLLOW_UP,
+        FOLLOW_UP_REPLY,
+        FOLLOW_UP_QUESTION,
+    ] {
+        let original = upgraded(text);
+        assert!(schema.is_valid(&original), "{original}");
+        assert!(!earlier.is_valid(&original));
+        let conversation = restore(&original).unwrap();
+        let rewritten = written(&conversation, original["observed_at"].as_str().unwrap());
+        assert_eq!(
+            serde_json::to_string(&rewritten).unwrap(),
+            serde_json::to_string(&original).unwrap(),
+            "field order and values"
+        );
+        assert!(schema.is_valid(&rewritten));
+    }
+    let conversation = restore(&upgraded(FOLLOW_UP_QUESTION)).unwrap();
+    let accounts: Vec<_> = conversation
+        .discussions()
+        .iter()
+        .flat_map(|discussion| discussion.notes())
+        .map(|note| (note.author.as_str(), note.account.clone().unwrap()))
+        .collect();
+    assert_eq!(
+        accounts[..3],
+        [
+            (
+                "10",
+                AuthorAccount {
+                    username: "author-10".into(),
+                    bot: BotStatus::NotBot
+                }
+            ),
+            (
+                "9",
+                AuthorAccount {
+                    username: "review-bot".into(),
+                    bot: BotStatus::Bot
+                }
+            ),
+            (
+                "10",
+                AuthorAccount {
+                    username: "author-10".into(),
+                    bot: BotStatus::NotBot
+                }
+            ),
+        ]
+    );
+}
+
+// Runs captured by rkc 0.1.0 keep working: their version 1 conversations
+// restore with the account details marked unavailable and are never rewritten.
+#[test]
+fn version_1_documents_still_restore_without_author_accounts() {
+    let earlier = schema_for(VERSION_1_SCHEMA);
     for text in [
         INITIAL_REVIEW,
         FOLLOW_UP,
@@ -271,11 +370,27 @@ fn packet_examples_satisfy_the_schema_and_round_trip_exactly() {
         FOLLOW_UP_QUESTION,
     ] {
         let original: Value = serde_json::from_str(text).unwrap();
-        assert!(schema.is_valid(&original), "{original}");
+        assert!(earlier.is_valid(&original), "{original}");
+        assert!(!schema().is_valid(&original));
         let conversation = restore(&original).unwrap();
-        let rewritten = written(&conversation, original["observed_at"].as_str().unwrap());
-        assert_eq!(rewritten, original);
-        assert!(schema.is_valid(&rewritten));
+        assert!(
+            conversation
+                .discussions()
+                .iter()
+                .flat_map(|discussion| discussion.notes())
+                .all(|note| note.account.is_none())
+        );
+        assert!(matches!(
+            ConversationDocument::new(&conversation, "2026-10-13T12:00:00Z".into()),
+            Err(JsonError::InvalidValue)
+        ));
+        assert_eq!(
+            restore(&upgraded(text))
+                .unwrap()
+                .changes_since(&conversation),
+            [],
+            "account details are no conversation change"
+        );
     }
 }
 
@@ -283,7 +398,7 @@ fn packet_examples_satisfy_the_schema_and_round_trip_exactly() {
 // crate does not interpret, and an anchor change is a freshness difference.
 #[test]
 fn positions_round_trip_verbatim_and_anchor_changes_are_detected() {
-    let mut original: Value = serde_json::from_str(FOLLOW_UP).unwrap();
+    let mut original = upgraded(FOLLOW_UP);
     let position = json!({
         "position_type": "text",
         "new_path": "src/quantity.rs",
@@ -405,10 +520,10 @@ fn freshness_ignores_order_and_observed_time_but_detects_note_changes() {
 #[test]
 fn strict_decoding_rejects_unknown_fields_and_inconsistent_state() {
     let schema = schema();
-    let original: Value = serde_json::from_str(FOLLOW_UP).unwrap();
+    let original = upgraded(FOLLOW_UP);
     type Edit = fn(&mut Value);
     // The final flag records whether the schema can express the rule.
-    let cases: [(&str, Edit, bool); 20] = [
+    let cases: [(&str, Edit, bool); 26] = [
         ("unknown top-level field", |v| v["extra"] = 1.into(), true),
         (
             "unknown discussion field",
@@ -482,7 +597,47 @@ fn strict_decoding_rejects_unknown_fields_and_inconsistent_state() {
             |v| v["discussions"][0]["notes"][0]["author"] = "".into(),
             true,
         ),
-        ("version 2", |v| v["version"] = 2.into(), true),
+        ("version 3", |v| v["version"] = 3.into(), true),
+        (
+            "missing author username",
+            |v| {
+                v["discussions"][0]["notes"][0]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("author_username");
+            },
+            true,
+        ),
+        (
+            "missing bot state",
+            |v| {
+                v["discussions"][0]["notes"][0]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("author_bot");
+            },
+            true,
+        ),
+        (
+            "blank author username",
+            |v| v["discussions"][0]["notes"][0]["author_username"] = " ".into(),
+            true,
+        ),
+        (
+            "null author username",
+            |v| v["discussions"][0]["notes"][0]["author_username"] = Value::Null,
+            true,
+        ),
+        (
+            "textual bot state",
+            |v| v["discussions"][0]["notes"][0]["author_bot"] = "unknown".into(),
+            true,
+        ),
+        (
+            "version 1 with account fields",
+            |v| v["version"] = 1.into(),
+            true,
+        ),
         ("other kind", |v| v["kind"] = "context".into(), true),
         (
             "local time",
@@ -535,6 +690,14 @@ fn documents_written_from_the_application_model_satisfy_the_schema() {
     let note = |note: &str, author: &str, position: Option<&str>| Note {
         id: id(note),
         author: ReviewerId::try_from(author.to_owned()).unwrap(),
+        account: Some(AuthorAccount {
+            username: format!("user-{author}"),
+            bot: match author {
+                "5" => BotStatus::Bot,
+                "6" => BotStatus::NotBot,
+                _ => BotStatus::Unknown,
+            },
+        }),
         body: format!("Body of {note}"),
         position: position.map(|text| Position::from_canonical_json(text.into()).unwrap()),
     };
@@ -570,6 +733,22 @@ fn documents_written_from_the_application_model_satisfy_the_schema() {
             value["discussions"][1]["notes"][0]["position"],
             json!({"new_path":"a.rs","new_line":1})
         );
+        assert_eq!(value["version"], 2);
+        let accounts: Vec<_> = [(0, 0), (1, 0), (1, 1)]
+            .into_iter()
+            .map(|(discussion, note)| {
+                let note = &value["discussions"][discussion]["notes"][note];
+                (note["author_username"].clone(), note["author_bot"].clone())
+            })
+            .collect();
+        assert_eq!(
+            accounts,
+            [
+                (json!("user-5"), json!(true)),
+                (json!("user-6"), json!(false)),
+                (json!("user-7"), Value::Null),
+            ]
+        );
         assert_eq!(restore(&value).unwrap(), conversation);
     }
     for observed_at in [
@@ -585,4 +764,30 @@ fn documents_written_from_the_application_model_satisfy_the_schema() {
             "{observed_at}"
         );
     }
+}
+
+// A username rename or a changed bot state between captures is not a
+// conversation change: authors compare by provider user ID only.
+#[test]
+fn renamed_authors_and_changed_bot_states_are_no_change() {
+    let original = upgraded(FOLLOW_UP_QUESTION);
+    let retained = restore(&original).unwrap();
+    let mut renamed = original.clone();
+    for discussion in renamed["discussions"].as_array_mut().unwrap() {
+        for note in discussion["notes"].as_array_mut().unwrap() {
+            note["author_username"] = "renamed-account".into();
+            note["author_bot"] = Value::Null;
+        }
+    }
+    let current = restore(&renamed).unwrap();
+    assert_ne!(current, retained);
+    assert_eq!(current.changes_since(&retained), []);
+    let mut reassigned = original.clone();
+    reassigned["discussions"][1]["notes"][1]["author"] = "11".into();
+    assert_eq!(
+        restore(&reassigned).unwrap().changes_since(&retained),
+        [ConversationChange::NoteAuthorChanged(id(
+            "fixture-question"
+        ))]
+    );
 }
