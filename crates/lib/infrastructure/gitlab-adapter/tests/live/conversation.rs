@@ -282,7 +282,7 @@ pub fn conversation_capture_matches_independent_rest_reads(service: &GitLabServi
     assert_eq!(inline.notes()[0].author.as_str(), commenter.id.to_string());
     let person = inline.notes()[0].account.as_ref().unwrap();
     let user = fixture.admin.get(&format!("users/{}", commenter.id));
-    assert_eq!(person.username, user["username"].as_str().unwrap());
+    assert_eq!(person.username.as_deref(), user["username"].as_str());
     assert_eq!(person.bot, BotStatus::NotBot);
     let raw_position = raw
         .iter()
@@ -326,7 +326,7 @@ pub fn conversation_capture_matches_independent_rest_reads(service: &GitLabServi
                 user["bot"], user["username"]
             );
             let account = observed.account.as_ref().unwrap();
-            assert_eq!(account.username, user["username"].as_str().unwrap());
+            assert_eq!(account.username.as_deref(), user["username"].as_str());
             assert_eq!(account.bot, BotStatus::Bot);
         }
         _ => println!("Bot note skipped: project access tokens are unavailable"),

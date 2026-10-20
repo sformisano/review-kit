@@ -47,9 +47,9 @@ position is written as the provider's JSON object.
 Every discussion needs `resolved` and every note needs `position`; either can be
 `null`. `resolved` is `null` exactly when `resolvable` is false. IDs and authors
 are nonblank, each discussion has a note, and discussion and note IDs are
-unique across the document. A version 2 note also needs a nonblank
-`author_username` and an `author_bot` of `true`, `false` or `null`, which restore
-as `BotStatus::Bot`, `NotBot` and `Unknown`. A version 1 note has neither field
+unique across the document. A version 2 note also needs an `author_username`
+that is a nonblank string or `null` for unknown, and an `author_bot` of `true`,
+`false` or `null`, which restore as `BotStatus::Bot`, `NotBot` and `Unknown`. A version 1 note has neither field
 and restores without an account (`Note::account` is `None`). A version 1
 conversation cannot be written again as version 2.
 

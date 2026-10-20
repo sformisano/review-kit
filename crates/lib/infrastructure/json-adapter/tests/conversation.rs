@@ -336,21 +336,21 @@ fn version_2_documents_satisfy_the_schema_and_round_trip_exactly() {
             (
                 "10",
                 AuthorAccount {
-                    username: "author-10".into(),
+                    username: Some("author-10".into()),
                     bot: BotStatus::NotBot
                 }
             ),
             (
                 "9",
                 AuthorAccount {
-                    username: "review-bot".into(),
+                    username: Some("review-bot".into()),
                     bot: BotStatus::Bot
                 }
             ),
             (
                 "10",
                 AuthorAccount {
-                    username: "author-10".into(),
+                    username: Some("author-10".into()),
                     bot: BotStatus::NotBot
                 }
             ),
@@ -523,7 +523,7 @@ fn strict_decoding_rejects_unknown_fields_and_inconsistent_state() {
     let original = upgraded(FOLLOW_UP);
     type Edit = fn(&mut Value);
     // The final flag records whether the schema can express the rule.
-    let cases: [(&str, Edit, bool); 26] = [
+    let cases: [(&str, Edit, bool); 25] = [
         ("unknown top-level field", |v| v["extra"] = 1.into(), true),
         (
             "unknown discussion field",
@@ -624,11 +624,6 @@ fn strict_decoding_rejects_unknown_fields_and_inconsistent_state() {
             true,
         ),
         (
-            "null author username",
-            |v| v["discussions"][0]["notes"][0]["author_username"] = Value::Null,
-            true,
-        ),
-        (
             "textual bot state",
             |v| v["discussions"][0]["notes"][0]["author_bot"] = "unknown".into(),
             true,
@@ -691,7 +686,7 @@ fn documents_written_from_the_application_model_satisfy_the_schema() {
         id: id(note),
         author: ReviewerId::try_from(author.to_owned()).unwrap(),
         account: Some(AuthorAccount {
-            username: format!("user-{author}"),
+            username: Some(format!("user-{author}")),
             bot: match author {
                 "5" => BotStatus::Bot,
                 "6" => BotStatus::NotBot,
@@ -789,5 +784,28 @@ fn renamed_authors_and_changed_bot_states_are_no_change() {
         [ConversationChange::NoteAuthorChanged(id(
             "fixture-question"
         ))]
+    );
+}
+
+// GitLab can omit a username; the capture records it as unknown instead of
+// failing, and the document keeps `null` for it.
+#[test]
+fn an_unknown_username_round_trips_as_null() {
+    let mut original = upgraded(INITIAL_REVIEW);
+    original["discussions"][0]["notes"][0]["author_username"] = Value::Null;
+    original["discussions"][0]["notes"][0]["author_bot"] = Value::Null;
+    assert!(schema().is_valid(&original));
+    let conversation = restore(&original).unwrap();
+    assert_eq!(
+        conversation.discussions()[0].notes()[0].account,
+        Some(AuthorAccount {
+            username: None,
+            bot: BotStatus::Unknown
+        })
+    );
+    assert_eq!(written(&conversation, "2026-10-13T12:00:00Z"), original);
+    assert_eq!(
+        conversation.changes_since(&restore(&upgraded(INITIAL_REVIEW)).unwrap()),
+        []
     );
 }

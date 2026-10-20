@@ -54,15 +54,19 @@ pub fn execute(options: &CommandOptions) -> Result<CommandOutput, CliError> {
 }
 
 /// `intact`, `mismatch` (bytes differ from the recorded hashes but still decode
-/// for this run) or `damaged` (files missing, undecodable or describing another
-/// run), with the affected file names.
+/// for this run), `newer` (every problem is a file written by a newer rkc) or
+/// `damaged` (files missing, undecodable or describing another run), with the
+/// affected file names.
 #[review_kit_observation::operations]
 #[helper]
 fn retained_state(stored: &StoredRun) -> Value {
     let damaged = damaged_retained(stored);
     if !damaged.is_empty() {
+        let newer = damaged
+            .iter()
+            .all(|(_, error)| error.document()["diagnostics"][0]["code"] == "newer_run_document");
         return json!({
-            "state": "damaged",
+            "state": if newer { "newer" } else { "damaged" },
             "files": damaged.iter().map(|(file, _)| file.name()).collect::<Vec<_>>(),
             "problems": damaged
                 .iter()
@@ -157,6 +161,9 @@ fn unresolved(progress: &PublicationProgress) -> Value {
     json!({"kind": kind, "finding": finding, "phase": phase})
 }
 
+/// Guidance for a run whose retained files a newer rkc wrote.
+const NEWER_GUIDANCE: &str = "A newer rkc wrote this run's retained files; continue the run with that rkc version or a later one, or stop it with rkc run stop --reason TEXT.";
+
 /// The next command for the run, from journal state first and assessment state second.
 ///
 /// `retained` is the `retained_files` value that `status` reports.
@@ -202,6 +209,9 @@ fn next_action(
             super::journal::MISSING_GUIDANCE
         );
     }
+    if retained["state"] == "newer" {
+        return NEWER_GUIDANCE.into();
+    }
     if !retained_intact {
         return "Retained run files are missing, damaged or changed; restore the run's exact files, or stop it with rkc run stop --reason TEXT and start a new run with rkc run start --new.".into();
     }
@@ -238,6 +248,11 @@ fn owner_recovery(
     retained: &Value,
 ) -> String {
     const RECOVER: &str = "run rkc publish with the originally permitted effects to reconcile this run's unfinished publication";
+    if retained["state"] == "newer" {
+        return format!(
+            "This run owns unfinished publication, but a newer rkc wrote its retained files. Install that rkc version or a later one, then {RECOVER}."
+        );
+    }
     if retained["state"] != "intact" {
         let files = retained["files"]
             .as_array()

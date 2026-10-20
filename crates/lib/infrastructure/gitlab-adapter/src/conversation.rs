@@ -45,8 +45,8 @@ impl GitLab {
     /// discussion with at least one non-system note.
     ///
     /// Bot notes are ordinary API-visible notes and are kept. Each note keeps
-    /// its author's username from the discussion and, with
-    /// [`BotLookup::Resolve`], the bot status that GitLab reports for the
+    /// its author's username from the discussion, when GitLab sends one, and,
+    /// with [`BotLookup::Resolve`], the bot status that GitLab reports for the
     /// account. Discussion pages are read to completion; an incomplete or
     /// over-limit collection fails. The reads are not an atomic provider
     /// snapshot.
@@ -172,7 +172,7 @@ fn supported_discussion(
         .map_err(|_| GitLabError::Protocol)
 }
 
-/// A note requires its author's nonblank username.
+/// A missing or blank author username is recorded as unknown.
 #[review_kit_observation::operations]
 #[helper]
 fn supported_note(
@@ -191,8 +191,7 @@ fn supported_note(
         .author
         .username
         .clone()
-        .filter(|username| !username.trim().is_empty())
-        .ok_or(GitLabError::Protocol)?;
+        .filter(|username| !username.trim().is_empty());
     Ok(conversation::Note {
         id: ProviderId::new(note.id.to_string()).map_err(|_| GitLabError::Protocol)?,
         author: note.reviewer()?,

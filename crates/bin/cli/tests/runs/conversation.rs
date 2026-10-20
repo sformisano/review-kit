@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 
 use super::{
     harness::{ERROR_POLICY, Harness, read_json, sha256},
-    server::{Fault, Response},
+    server::{Fault, MR_PATH, Response},
 };
 
 /// `[author, author_username, author_bot]` of every note in stored order.
@@ -31,8 +31,12 @@ fn run_start_records_each_note_authors_username_and_bot_state() {
             ("person", 77, "Could the error path log its cause?"),
             ("bot", 91, "Automated review: no blocking issues."),
             ("hidden", 92, "A note by an account GitLab does not show."),
+            ("nameless", 93, "A note whose author has no username."),
         ] {
-            let note = state.note(body, author);
+            let mut note = state.note(body, author);
+            if author == 93 {
+                note["author"].as_object_mut().unwrap().remove("username");
+            }
             state
                 .discussions
                 .push(json!({"id": discussion, "individual_note": true, "notes": [note]}));
@@ -50,6 +54,7 @@ fn run_start_records_each_note_authors_username_and_bot_state() {
             json!(["77", "user-77", false]),
             json!(["91", "user-91", true]),
             json!(["92", "user-92", null]),
+            json!(["93", null, false]),
         ]
     );
 }
@@ -72,12 +77,7 @@ fn a_run_with_a_version_1_conversation_still_plans_and_publishes() {
             note.remove("author_bot").unwrap();
         }
     }
-    let bytes = serde_json::to_vec_pretty(&document).unwrap();
-    fs::write(&path, &bytes).unwrap();
-    let manifest = harness.file(&run_id, "review-run.json");
-    let mut value = read_json(&manifest);
-    value["snapshot_files"]["review-conversation.json"] = json!(sha256(&bytes));
-    fs::write(&manifest, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+    retain_conversation(&harness, &run_id, &document);
 
     harness.declare_policies(&run_id, &[ERROR_POLICY]);
     harness.fill_ready(&run_id);
@@ -93,4 +93,118 @@ fn a_run_with_a_version_1_conversation_still_plans_and_publishes() {
         1,
         "the retained capture is never rewritten"
     );
+}
+
+/// The freshness preflight never needs usernames, so a note whose author has
+/// none, before or after capture, does not stop publication.
+#[test]
+fn a_note_author_without_a_username_does_not_stop_publication() {
+    let harness = Harness::new();
+    let nameless = |harness: &Harness, discussion: &str| {
+        let mut state = harness.http.state.lock().unwrap();
+        let mut note = state.note("A note whose author has no username.", 93);
+        note["author"].as_object_mut().unwrap().remove("username");
+        state
+            .discussions
+            .push(json!({"id": discussion, "individual_note": true, "notes": [note]}));
+    };
+    nameless(&harness, "before");
+    let run_id = harness.accepted_with_finding();
+    nameless(&harness, "after");
+    let published = harness.ok(&["publish", "--effects", "review"]);
+    assert_eq!(published["status"], "settled", "{published:#}");
+    let document = read_json(&harness.file(&run_id, "review-conversation.json"));
+    assert_eq!(accounts(&document), [json!(["93", null, false])]);
+}
+
+/// Replace the run's conversation with `document` and record its hash, as the
+/// run that wrote it would have.
+fn retain_conversation(harness: &Harness, run_id: &str, document: &Value) {
+    let bytes = serde_json::to_vec_pretty(document).unwrap();
+    fs::write(harness.file(run_id, "review-conversation.json"), &bytes).unwrap();
+    let manifest = harness.file(run_id, "review-run.json");
+    let mut value = read_json(&manifest);
+    value["snapshot_files"]["review-conversation.json"] = json!(sha256(&bytes));
+    fs::write(&manifest, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+}
+
+/// A conversation that a newer rkc wrote, with a higher version and a field
+/// this build does not know, is reported as newer instead of damaged.
+#[test]
+fn a_conversation_from_a_newer_rkc_is_reported_as_newer_not_damaged() {
+    let harness = Harness::new();
+    harness.add_comment("question", "Is the cause kept?");
+    let run_id = harness.start();
+    let original = read_json(&harness.file(&run_id, "review-conversation.json"));
+    let mut newer = original.clone();
+    newer["version"] = 3.into();
+    newer["discussions"][0]["notes"][0]["author_avatar"] = "avatar.png".into();
+    retain_conversation(&harness, &run_id, &newer);
+
+    let status = harness.ok(&["status"]);
+    assert_eq!(status["retained_files"]["state"], "newer", "{status:#}");
+    assert_eq!(
+        status["retained_files"]["problems"][0]["code"],
+        "newer_run_document"
+    );
+    assert!(
+        status["next"].as_str().unwrap().contains("newer rkc"),
+        "{status:#}"
+    );
+    for args in [
+        vec!["check"],
+        vec!["publish", "--effects", "review", "--plan"],
+    ] {
+        let refused = harness.fails(&args, 2, "newer_run_document");
+        let diagnostic = &refused["diagnostics"][0];
+        assert_eq!(diagnostic["file"], "review-conversation.json", "{args:?}");
+        assert_eq!(diagnostic["version"], 3);
+        assert_eq!(diagnostic["supported"], 2);
+    }
+    assert_eq!(harness.writes(), 0);
+    harness.ok(&["run", "stop", "--reason", "Written by a newer rkc."]);
+
+    // A malformed document of a version this build reads stays damaged.
+    let damaged = harness.ok(&["run", "start", "--new"])["run_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut malformed = original;
+    malformed["discussions"][0]["notes"][0]["author_avatar"] = "avatar.png".into();
+    retain_conversation(&harness, &damaged, &malformed);
+    let status = harness.ok(&["status"]);
+    assert_eq!(status["retained_files"]["state"], "damaged", "{status:#}");
+    harness.fails(&["check"], 2, "invalid_run_document");
+}
+
+/// An owner of unfinished publication whose conversation a newer rkc wrote is
+/// told to recover with that rkc, not to restore files.
+#[test]
+fn an_owner_whose_conversation_a_newer_rkc_wrote_is_told_to_use_that_rkc() {
+    let harness = Harness::lost_responses();
+    let owner = harness.ready_run(false);
+    harness
+        .http
+        .state
+        .lock()
+        .unwrap()
+        .faults
+        .push(Fault::lost(&format!("{MR_PATH}/notes"), false));
+    let (output, uncertain) = harness.rkc(&["publish", "--effects", "review"]);
+    assert_eq!(output.status.code(), Some(6), "{uncertain:#}");
+    let mut newer = read_json(&harness.file(&owner, "review-conversation.json"));
+    newer["version"] = 3.into();
+    retain_conversation(&harness, &owner, &newer);
+    let status = harness.ok(&["status"]);
+    assert_eq!(
+        status["journal"]["publication_status"], "pending",
+        "{status:#}"
+    );
+    assert_eq!(status["retained_files"]["state"], "newer");
+    let next = status["next"].as_str().unwrap();
+    assert!(
+        next.contains("a newer rkc wrote its retained files"),
+        "{next}"
+    );
+    assert!(!next.contains("Restore"), "{next}");
 }

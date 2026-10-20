@@ -32,7 +32,7 @@ All paths below are relative to the configured deployment's `/api/v4`.
 | Select exact complete diff | Paginated `GET .../versions`, then `GET .../versions/:id` |
 | Discover summary | Paginated `GET .../notes`, direct `GET .../notes/:id` |
 | Discover roots and replies | Paginated `GET .../discussions`, direct `GET .../discussions/:id` |
-| Capture supported conversation | `GET /projects/P/merge_requests/M` for title and description, paginated `GET .../discussions`, then `GET /users/:id` once per distinct note author for the bot status |
+| Capture supported conversation | `GET /projects/P/merge_requests/M` for title and description, paginated `GET .../discussions`, then, during `run start` only, `GET /users/:id` for at most 50 distinct note authors ([note author accounts](../crates/lib/infrastructure/gitlab-adapter/README.md#note-author-accounts)) |
 | Read committed source | Paginated `GET /projects/S/repository/tree`, `GET /projects/S/repository/files/:encoded_path/raw` at head SHA |
 | Create/update owned summary | `POST .../notes`, `PUT .../notes/:id` |
 | Publish inline finding | `POST .../discussions` with text position |

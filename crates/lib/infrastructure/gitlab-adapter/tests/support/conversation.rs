@@ -570,7 +570,7 @@ fn note_authors_keep_usernames_and_the_bot_status_gitlab_reports() {
         assert_eq!(
             account(&conversation, author),
             AuthorAccount {
-                username: format!("user-{author}"),
+                username: Some(format!("user-{author}")),
                 bot
             },
             "{author}"
@@ -638,6 +638,52 @@ fn a_failed_account_lookup_stops_further_lookups_and_capture_still_succeeds() {
 }
 
 #[test]
+fn hidden_and_mismatched_accounts_stay_unknown_and_lookups_continue() {
+    for response in [
+        Response::status(403),
+        Response::json(json!({"id":1,"username":"someone-else","bot":true})),
+    ] {
+        let fixture = Fixture::new();
+        seed_authors(&fixture);
+        fixture
+            .state
+            .lock()
+            .unwrap()
+            .faults
+            .insert(0, Fault::response("GET", "/users/900", response));
+        let conversation = capture(&fixture).unwrap();
+        assert_eq!(account(&conversation, "900").bot, BotStatus::Unknown);
+        assert_eq!(account(&conversation, "77").bot, BotStatus::NotBot);
+        assert_eq!(
+            user_lookups(&fixture),
+            ["/users/77", "/users/900", "/users/901", "/users/902"]
+        );
+    }
+}
+
+#[test]
+fn a_rejected_credential_or_a_lost_connection_stops_the_lookups() {
+    let unauthorized = Fixture::new();
+    let lost = Fixture::with_lost_responses();
+    for (fixture, fault) in [
+        (
+            &unauthorized,
+            Fault::response("GET", "/users/900", Response::status(401)),
+        ),
+        (&lost, Fault::lost_method("GET", "/users/900", false)),
+    ] {
+        seed_authors(fixture);
+        fixture.state.lock().unwrap().faults.insert(0, fault);
+        let conversation = capture(fixture).unwrap();
+        assert_eq!(account(&conversation, "77").bot, BotStatus::NotBot);
+        for author in ["900", "901", "902"] {
+            assert_eq!(account(&conversation, author).bot, BotStatus::Unknown);
+        }
+        assert_eq!(user_lookups(fixture), ["/users/77", "/users/900"]);
+    }
+}
+
+#[test]
 fn skipped_lookups_keep_usernames_and_leave_bot_status_unknown() {
     let fixture = Fixture::new();
     seed_authors(&fixture);
@@ -649,7 +695,7 @@ fn skipped_lookups_keep_usernames_and_leave_bot_status_unknown() {
     assert_eq!(
         account(&conversation, "900"),
         AuthorAccount {
-            username: "user-900".into(),
+            username: Some("user-900".into()),
             bot: BotStatus::Unknown
         }
     );
@@ -658,20 +704,56 @@ fn skipped_lookups_keep_usernames_and_leave_bot_status_unknown() {
     assert_eq!(resolved.changes_since(&conversation), []);
 }
 
+// A missing or blank username never fails capture: it is recorded as unknown,
+// in run-start and freshness captures alike, and is no conversation change.
 #[test]
-fn a_note_author_without_a_username_fails_capture() {
-    for username in [Value::Null, json!(""), json!(" ")] {
+fn a_note_author_without_a_username_is_captured_with_an_unknown_username() {
+    for username in [None, Some(Value::Null), Some(json!("")), Some(json!(" "))] {
         let fixture = Fixture::new();
-        {
-            let mut state = fixture.state.lock().unwrap();
-            let mut note = state.note("No username", 77);
-            note["author"]["username"] = username.clone();
-            state.discussions.push(thread("t", true, vec![note]));
+        let named = capture_note_by(&fixture, None);
+        let anonymous = capture_note_by(&fixture, Some(username.clone()));
+        for lookup in [BotLookup::Resolve, BotLookup::Skip] {
+            let client = fixture.connect();
+            let conversation = client
+                .capture_conversation(client.subject(), lookup)
+                .unwrap();
+            let account = account(&conversation, "77");
+            assert_eq!(account.username, None, "{username:?} {lookup:?}");
+            assert_eq!(conversation.changes_since(&named), [], "{username:?}");
         }
+        assert_eq!(account(&anonymous, "77").bot, BotStatus::NotBot);
+        let document =
+            ConversationDocument::new(&anonymous, "2026-10-13T12:00:00Z".into()).unwrap();
+        let stored: Value = serde_json::from_slice(&encode(&document).unwrap()).unwrap();
         assert_eq!(
-            capture(&fixture).unwrap_err(),
-            GitLabError::Protocol,
-            "{username}"
+            stored["discussions"][0]["notes"][0]["author_username"],
+            Value::Null
         );
     }
+}
+
+/// Add one note by author 77 and capture it, first with the fixture's
+/// username, then, when `username` is given, after replacing or removing it.
+fn capture_note_by(fixture: &Fixture, username: Option<Option<Value>>) -> Conversation {
+    {
+        let mut state = fixture.state.lock().unwrap();
+        if state.discussions.is_empty() {
+            let note = state.note("Author note", 77);
+            state.discussions.push(thread("t", true, vec![note]));
+        }
+        if let Some(username) = username {
+            let author = state.discussions[0]["notes"][0]["author"]
+                .as_object_mut()
+                .unwrap();
+            match username {
+                Some(value) => {
+                    author.insert("username".into(), value);
+                }
+                None => {
+                    author.remove("username");
+                }
+            }
+        }
+    }
+    capture(fixture).unwrap()
 }

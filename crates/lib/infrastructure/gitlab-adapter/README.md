@@ -259,7 +259,7 @@ Every discussion with at least one non-system note is kept, including notes by
 bot users. System notes are omitted, and so is a discussion that contains only
 system notes. Each note keeps its ID, numeric author ID as text, the author's
 username, the author's bot status, body and verbatim `position` object, or no
-position. A note author without a nonblank username fails capture. Every note in a discussion passes
+position. A missing or blank username is recorded as unknown. Every note in a discussion passes
 the discovery scope check: target project, MR, noteable type and IID, and
 nonzero note and author IDs. Duplicate discussion or note IDs, empty
 discussions, non-object positions and notes without `resolvable` fail capture.
@@ -300,8 +300,8 @@ Every other result leaves the author `Unknown`. A missing, hidden or malformed
 account affects only that author. Any other failure, such as a rate limit,
 transport loss or a server error, stops the lookups, and the remaining authors
 stay `Unknown`. A lookup never fails capture. Freshness ignores accounts, so the
-publication preflight captures with `BotLookup::Skip`, which sends no lookup
-and leaves every bot status `Unknown`.
+CLI resolves only during `run start`; its publication preflight captures with
+`BotLookup::Skip`, which sends no lookup and leaves every bot status `Unknown`.
 
 Verified against the pinned CE 19.3.3 server: Developer tokens with `api` or
 `read_api` scope read `bot` for a project access token bot (`true`, shown in

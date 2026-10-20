@@ -109,14 +109,15 @@ pub struct Note {
 /// comparisons; [`Note::author`] does.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthorAccount {
-    pub username: String,
+    /// Nonblank provider username; `None` when the provider sent none.
+    pub username: Option<String>,
     pub bot: BotStatus,
 }
 
 /// Whether the provider marks an account as automated.
 ///
-/// `Unknown` means the capture could not establish it; it is not evidence of
-/// a person.
+/// `Unknown` means the capture could not establish it; it shows neither a bot
+/// nor a person.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BotStatus {
     Bot,

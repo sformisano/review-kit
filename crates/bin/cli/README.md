@@ -303,13 +303,13 @@ selected run once and works on that run until it ends.
 
 `review-conversation.json` holds the merge-request conversation as `run start`
 captured it. It is review context for the agent: it grants no finding identity,
-reply authority or effect authority. rkc never rewrites it. rkc writes version 2.
-Runs captured by rkc 0.1.0 keep version 1, which has no `author_username` or
-`author_bot` field; rkc still reads them.
+reply authority or effect authority. rkc never rewrites it. rkc 0.1.0 writes
+version 1, which has no `author_username` or `author_bot` field. rkc 0.1.1 and
+later write version 2 and read both versions.
 
 | Field | Meaning |
 | --- | --- |
-| `version` | `2`, or `1` in a run captured by rkc 0.1.0 |
+| `version` | `2` from rkc 0.1.1 and later, `1` from rkc 0.1.0 |
 | `kind` | `"review_conversation"` |
 | `subject` | Provider, host, repository and merge-request number |
 | `observed_at` | Capture time in UTC, for example `2026-10-20T08:15:00Z` |
@@ -319,37 +319,52 @@ Runs captured by rkc 0.1.0 keep version 1, which has no `author_username` or
 | `discussions[].resolved` | `true` when every resolvable note is resolved; `null` when the discussion is not resolvable |
 | `discussions[].notes[].id` | GitLab note ID |
 | `discussions[].notes[].author` | The author's numeric GitLab user ID, as text. This value identifies the account |
-| `discussions[].notes[].author_username` | The author's GitLab username at capture time. A username can change; `author` does not |
+| `discussions[].notes[].author_username` | The author's GitLab username at capture time, or `null` when GitLab sent none. A username can change; `author` does not |
 | `discussions[].notes[].author_bot` | `true` when GitLab marks the account as a bot, `false` when GitLab reports a non-bot account, `null` when unknown |
 | `discussions[].notes[].body` | The note's Markdown as GitLab stores it |
 | `discussions[].notes[].position` | GitLab's diff position object, or `null` for a note without a diff anchor |
 
 GitLab marks project and group access token bots, service accounts and internal
-users such as GitLab Duo (`GitLabDuo`) as bots. `author_bot: null` means GitLab
-did not say, for example because the account lookup was refused, failed, hit a
-rate limit or exceeded the 50-author limit of one capture. Treat it as unknown,
-never as a person. `false` reports GitLab's account type only; it does not prove
-that a person wrote the note. The
+users such as GitLab Duo (`GitLabDuo`) as bots. rkc asks GitLab for the bot
+status only during `run start`, once per distinct note author and for at most
+50 authors; planning and publication ask nothing. `author_bot` is `null` when
+GitLab refused or failed the lookup, when the lookup hit a rate limit, or when
+the author was beyond the 50-author limit. A version 1 file has no
+`author_bot` field, which also means unknown. Treat `null` or a missing field
+as unknown: it shows neither a bot nor a person. `false` reports GitLab's
+account type only; it does not prove that a person wrote the note. The
 [GitLab adapter](../../lib/infrastructure/gitlab-adapter/README.md#note-author-accounts)
 describes the lookups.
 
 Account details never change publication rules. Inside the reviewer's own
 threads a bot's note blocks like anyone else's, and the
 [freshness preflight](#publication-and-recovery) compares authors by `author`
-only, so a renamed account or a changed bot status never blocks publication.
-System notes are not captured. The
+only, so a renamed account, a missing username or a changed bot status never
+blocks publication. System notes are not captured. The
 [JSON adapter](../../lib/infrastructure/json-adapter/README.md#supported-conversation)
 owns the schema and validation.
 
-A note by a project access token bot:
+rkc 0.1.0 cannot read version 2. For a run started by rkc 0.1.1 or later,
+rkc 0.1.0 reports the file as damaged: `status` shows
+`retained_files.state: "damaged"`, and `check` and `publish --plan` fail with
+`invalid_run_document`. It cannot recover such a run's unfinished publication,
+so every other run of the same merge request and reviewer fails with
+`publication_pending_owner` until the newer rkc finishes it.
+[Rollback](../../../docs/distribution.md#upgrade-and-rollback) lists what to
+finish first. A conversation version above the one this rkc reads fails with
+`newer_run_document` (exit `2`), with `file`, `version` and `supported` in the
+diagnostic, and `status` shows `retained_files.state: "newer"`. Continue such a
+run with the newer rkc that wrote it.
+
+A note by a project access token bot, with illustrative values:
 
 ```json
 {
-  "id": "7153",
-  "author": "887",
-  "author_username": "project_530_bot_6a3146a46d5bfcc4972cab1aeb91619b",
+  "id": "1201",
+  "author": "345",
+  "author_username": "project_42_bot_0123456789abcdef0123456789abcdef",
   "author_bot": true,
-  "body": "Automated review: no blocking issues detected (edited).",
+  "body": "Automated review: no blocking issues detected.",
   "position": null
 }
 ```
@@ -883,7 +898,7 @@ results or exit codes.
 | `revise` | `status` (`prepared`, `malformed_draft`, `blank_reason`, `revision_failed`), `draft`, `supersedes`, `archived_draft`, `diagnostics` |
 | `run select` | `status: "selected"`, `selected_run_id`, `run_status`, `completion`, `reason`, `assessment`, `journal`, `publication_owner` |
 | `publish` | `mode`, `status` (`planned` or `failed` for a plan; `settled`, `unfinished`, `already_settled`, `settlement_rejected`), `settlement`, `publication`, `effects` (see [publication](#publication-and-recovery); `null` without a plan or publication result), `run` (the full report), `progress` (journal path), `storage_failures`; a plan adds `publication_owner_released` and `publication_owner_settled_by_provider` |
-| `status` | lifecycle, `assessment` (`state`, `draft`, `accepted`; see [acceptance](#assessment-acceptance)), `retained_files` (`state`: `intact`, `mismatch` or `damaged`, with `files`), `journal` (`state`, `publication_owner`, `owner_provider_write_possible`, `settlement`, `publication_status` (`pending` or `bound_unsent`), `provider_write_possible`, `round`, `dispatch_may_have_started`, `unresolved_effect`) |
+| `status` | lifecycle, `assessment` (`state`, `draft`, `accepted`; see [acceptance](#assessment-acceptance)), `retained_files` (`state`: `intact`, `mismatch`, `newer` (written by a newer rkc; see [captured conversation](#captured-conversation)) or `damaged`, with `files`), `journal` (`state`, `publication_owner`, `owner_provider_write_possible`, `settlement`, `publication_status` (`pending` or `bound_unsent`), `provider_write_possible`, `round`, `dispatch_may_have_started`, `unresolved_effect`) |
 
 Publication output separates the agent's decision, publication status, attempted
 and verified effects; [result inspection](#result-inspection) shows how to read them.
@@ -891,7 +906,7 @@ and verified effects; [result inspection](#result-inspection) shows how to read 
 | Exit | Meaning | Codes |
 | --- | --- | --- |
 | `0` | Success; inspect publication status | `already_settled` |
-| `2` | Invalid arguments, configuration, environment, input or rendering | `arguments`, `configuration`, `discovery`, `not_in_git_worktree`, `runtime_tracked`, `runtime_redirected`, `runtime_unrecognized`, `no_selected_run`, `invalid_run_id`, `run_missing`, `run_file_missing`, `run_identity_mismatch`, `identity_mismatch`, `repository_mismatch`, `hash_mismatch`, `accepted_snapshot_missing`, `invalid_accepted_snapshot`, `invalid_run_document`, `assessment_not_accepted`, `dirty_draft`, `blank_reason`, `render_profile_changed` |
+| `2` | Invalid arguments, configuration, environment, input or rendering | `arguments`, `configuration`, `discovery`, `not_in_git_worktree`, `runtime_tracked`, `runtime_redirected`, `runtime_unrecognized`, `no_selected_run`, `invalid_run_id`, `run_missing`, `run_file_missing`, `run_identity_mismatch`, `identity_mismatch`, `repository_mismatch`, `hash_mismatch`, `accepted_snapshot_missing`, `invalid_accepted_snapshot`, `invalid_run_document`, `newer_run_document`, `assessment_not_accepted`, `dirty_draft`, `blank_reason`, `render_profile_changed` |
 | `3` | Reviewed source or the reviewer's own threads changed before dispatch, or the revision changed during publication or recovery | `source_changed`, `conversation_changed`, `changed_revision`, `discovery`, `gitlab` |
 | `4` | Reviewer or authority mismatch | `wrong_reviewer`, `discovery` |
 | `5` | Busy locks, run, journal or managed history state conflicts | `workspace_busy`, `publication_busy`, `open_run_exists`, `run_terminal`, `publication_pending_owner`, `binding_mismatch`, `no_unfinished_publication`, `journal_unavailable`, `journal_missing`, `run_journal_exists`, `settlement_conflict`, `managed_history_conflict`, `discovery`, `gitlab` |

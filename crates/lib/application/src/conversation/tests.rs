@@ -20,7 +20,7 @@ fn note(
         id: id(note)?,
         author: ReviewerId::try_from(author.to_owned())?,
         account: Some(AuthorAccount {
-            username: format!("user-{author}"),
+            username: Some(format!("user-{author}")),
             bot: BotStatus::NotBot,
         }),
         body: body.into(),
@@ -552,12 +552,12 @@ fn author_accounts_are_context_and_never_a_change() -> TestResult {
             for note in notes.iter_mut() {
                 note.account = match note.id.as_str() {
                     "200" => Some(AuthorAccount {
-                        username: "renamed-reviewer".into(),
+                        username: Some("renamed-reviewer".into()),
                         bot: BotStatus::Unknown,
                     }),
                     "201" => None,
                     _ => Some(AuthorAccount {
-                        username: "renamed".into(),
+                        username: None,
                         bot: BotStatus::Bot,
                     }),
                 };

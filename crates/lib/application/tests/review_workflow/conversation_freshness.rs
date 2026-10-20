@@ -14,7 +14,7 @@ fn note(id: &str, author: &str, body: &str) -> Note {
         id: provider_id(id),
         author: reviewer(author),
         account: Some(AuthorAccount {
-            username: author.into(),
+            username: Some(author.into()),
             bot: if author == "bot" {
                 BotStatus::Bot
             } else {

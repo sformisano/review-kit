@@ -177,10 +177,10 @@ Closed findings can retain historical source evidence without a current diff anc
 
 `conversation::Conversation` holds the merge-request title, description and every discussion with a supported non-system note.
 It is review context; it grants no finding identity, reply authority, policy selection or effect authority.
-Each `Note` keeps its author's provider user identity in `author` and, when the capture has it, an `AuthorAccount` in `account`: the username and a `BotStatus` of `Bot`, `NotBot` or `Unknown`.
-`Unknown` means the capture could not establish the status; it is not evidence of a person.
+Each `Note` keeps its author's provider user identity in `author` and, when the capture has it, an `AuthorAccount` in `account`: the username when the provider sent one, and a `BotStatus` of `Bot`, `NotBot` or `Unknown`.
+`Unknown` means the capture could not establish the status; it shows neither a bot nor a person.
 `Conversation::changes_since` lists every difference from a retained capture, ignoring order and observation time.
-It identifies authors by `author` alone, so a renamed account, a changed bot status or a capture without accounts is no change.
+It identifies authors by `author` alone, so a renamed account, a missing username, a changed bot status or a capture without accounts is no change.
 
 Publication freshness uses `Conversation::owned_changes_since` with `OwnedThreads`.
 `OwnedThreads::of` collects each history's owned summary notes and finding root discussions that its reviewer authored.

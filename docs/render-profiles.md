@@ -194,7 +194,7 @@ Keep using the same executable and profile files throughout an unfinished attemp
 | --- | --- | --- |
 | Provider summary state | Version 3 with `confirmed_validation` rounds | Version 3, with or without that field |
 | Review runs: workspace, run manifest and captured context | Version 1 | Version 1 |
-| Captured conversation, `review-conversation.json` | Version 2 | Versions 1 and 2; version 1 notes have no author account |
+| Captured conversation, `review-conversation.json` | Version 2 from rkc 0.1.1 and later; version 1 from rkc 0.1.0 | Versions 1 and 2; version 1 notes have no author account. rkc 0.1.0 reads version 1 only |
 | Run assessment, `review-assessment.draft.json` | Version 4 | Version 4 |
 | Run publication journal, `publication-progress.json` | Version 3 | Version 3 |
 

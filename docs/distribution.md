@@ -172,6 +172,11 @@ Retain current workspaces and shared publication progress, including writes atte
 Restoring an older progress backup after a provider write can erase unresolved intent and permit a duplicate write.
 Use a previous executable only after testing it against copies of the current documents.
 If it cannot read current progress, retain the current executable for recovery and stop publication.
+rkc 0.1.1 and later write `review-conversation.json` version 2, which rkc 0.1.0 cannot read;
+the [captured conversation reference](../crates/bin/cli/README.md#captured-conversation) lists the symptoms.
+Before rolling back to 0.1.0, finish or stop every run that the newer executable started.
+Keep the newer executable for any such run that owns unfinished publication and finish that publication with it first.
+While it is unfinished, rkc 0.1.0 cannot recover it and refuses every other run of that merge request and reviewer with `publication_pending_owner`.
 An executable without review runs cannot read the run publication journal, as the
 [state compatibility contract](render-profiles.md#retained-state-compatibility) describes.
 The [publication recovery reference](../crates/bin/cli/README.md#publication-and-recovery) defines recovery decisions.

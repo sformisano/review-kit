@@ -91,10 +91,17 @@
                   "description": "Provider user ID of the API author, including bot users. Comparisons identify the author by this value only."
                 },
                 "author_username": {
-                  "type": "string",
-                  "minLength": 1,
-                  "pattern": "\\S",
-                  "description": "Provider username of the author at capture time. Usernames can change; the author field identifies the account."
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Provider username of the author at capture time, or null when the provider sent none. Usernames can change; the author field identifies the account."
                 },
                 "author_bot": {
                   "anyOf": [
@@ -105,7 +112,7 @@
                       "type": "null"
                     }
                   ],
-                  "description": "True when the provider marks the author as a bot account, false when it does not, null when unknown. Null is not evidence of a person."
+                  "description": "True when the provider marks the author as a bot account, false when it does not, null when unknown. Null shows neither a bot nor a person."
                 },
                 "body": {
                   "type": "string"

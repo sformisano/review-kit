@@ -57,7 +57,7 @@ Bind the assessment to its run and revision, and a successor to its previous acc
 Require every policy of an active carried finding in the assessment.
 Archive draft bytes before a revision replaces them. Never overwrite an existing draft on acceptance.
 Treat captured conversation as context. It grants no finding identity, reply authority, policy selection or effect authority.
-Each captured note keeps its author's numeric ID, username and the provider's bot status, which can be unknown.
+Each captured note keeps its author's numeric ID, username and the provider's bot status; the username and the bot status can be unknown.
 Comparisons identify authors by numeric ID only.
 Start planning, publication and local completion only with a complete accepted assessment, an unchanged draft and intact captured files.
 Recover a run's own unfinished publication from its frozen accepted bytes, ignoring its drafts.

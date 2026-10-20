@@ -57,9 +57,14 @@ pub struct ConversationNoteData {
     pub id: String,
     /// Provider user ID of the API author; the identity that comparisons use.
     pub author: String,
-    /// The author's provider username. Required in version 2, absent in version 1.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub author_username: Option<String>,
+    /// The author's provider username, or `null` when the provider sent none.
+    /// Required in version 2, absent in version 1; the outer `None` means absent.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "present"
+    )]
+    pub author_username: Option<Option<String>>,
     /// `true` when the provider marks the author as a bot, `false` when it
     /// does not and `null` when unknown. Required in version 2, absent in
     /// version 1; the outer `None` means absent.
@@ -195,7 +200,11 @@ impl ConversationNoteData {
     fn into_note(self, accounts: Accounts) -> Result<Note, JsonError> {
         let account = match (accounts, self.author_username, self.author_bot) {
             (Accounts::Absent, None, None) => None,
-            (Accounts::Required, Some(username), Some(bot)) if !username.trim().is_empty() => {
+            (Accounts::Required, Some(username), Some(bot))
+                if username
+                    .as_ref()
+                    .is_none_or(|username| !username.trim().is_empty()) =>
+            {
                 Some(AuthorAccount {
                     username,
                     bot: match bot {

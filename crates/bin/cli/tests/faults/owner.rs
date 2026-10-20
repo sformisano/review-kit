@@ -199,8 +199,14 @@ fn an_unsent_owner_resumes_its_publication_past_foreign_comments() {
     );
     let state = harness.http.state.lock().unwrap();
     assert_eq!(
-        state.discussions[0], foreign[0],
-        "the foreign comment is untouched"
+        state.discussions[..foreign.len()],
+        foreign[..],
+        "every earlier discussion, including the foreign comment, is untouched"
+    );
+    assert_eq!(
+        state.discussions.len(),
+        foreign.len() + 1,
+        "one new finding"
     );
 }
 
@@ -208,6 +214,12 @@ fn an_unsent_owner_resumes_its_publication_past_foreign_comments() {
 /// cannot publish its assessed snapshot; a fresh run releases its binding.
 #[test]
 fn an_unsent_follow_up_owner_whose_own_thread_changed_yields_to_a_fresh_run() {
+    for unsent in [Unsent::Prepared, Unsent::Rejected] {
+        follow_up_owner_yields_after_its_own_thread_changed(unsent);
+    }
+}
+
+fn follow_up_owner_yields_after_its_own_thread_changed(unsent: Unsent) {
     let harness = Harness::new();
     harness.accepted_with_finding();
     harness.ok(&["publish", "--effects", "review"]);
@@ -217,10 +229,30 @@ fn an_unsent_follow_up_owner_whose_own_thread_changed_yields_to_a_fresh_run() {
         "publish.after_intent:1",
         &["publish", "--effects", "review"],
     );
+    if let Unsent::Rejected = unsent {
+        let summary = harness.http.state.lock().unwrap().notes[0]["id"].clone();
+        harness
+            .http
+            .state
+            .lock()
+            .unwrap()
+            .faults
+            .push(Fault::response(
+                "PUT",
+                &format!("{MR_PATH}/notes/{summary}"),
+                Response::status(422),
+            ));
+        let (output, rejected) = harness.rkc(&["publish", "--effects", "review"]);
+        assert_eq!(output.status.code(), Some(7), "{rejected:#}");
+        assert_eq!(rejected["provider_write_possible"], false, "{rejected:#}");
+    }
     let pending = harness.journal();
-    assert_eq!(pending["coverage_binding"]["run_id"], owner);
-    assert_eq!(pending["dispatch_may_have_started"], false);
-    assert_eq!(pending["unresolved"]["phase"], "prepared");
+    assert_eq!(pending["coverage_binding"]["run_id"], owner, "{unsent:?}");
+    assert_eq!(pending["dispatch_may_have_started"], false, "{unsent:?}");
+    match unsent {
+        Unsent::Prepared => assert_eq!(pending["unresolved"]["phase"], "prepared"),
+        Unsent::Rejected => assert_eq!(pending["unresolved"], Value::Null),
+    }
     let question = harness
         .http
         .state

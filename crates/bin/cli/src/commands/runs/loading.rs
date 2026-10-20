@@ -4,9 +4,10 @@ use review_kit_filesystem_adapter::{
 };
 use review_kit_gitlab_adapter::RetainedSource;
 use review_kit_json_adapter::{
-    ContextDocument, ConversationDocument,
+    CONVERSATION_VERSION, ContextDocument, ConversationDocument,
     checkpoints::{RepositoryBinding, ReviewRunDocument, RunLifecycle},
 };
+use serde::Deserialize;
 use serde_json::json;
 
 use crate::error::CliError;
@@ -125,12 +126,17 @@ fn retained_context(
 }
 
 /// `review-conversation.json`, decoded and bound to the manifest's subject.
+///
+/// A version newer than this build reads is `newer_run_document`, not damage.
 #[review_kit_observation::operations]
 #[helper]
 fn retained_conversation(
     dir: &RunDir,
     manifest: &ReviewRunDocument,
 ) -> Result<Conversation, CliError> {
+    if let Some(error) = newer_document(dir, SnapshotFile::Conversation, CONVERSATION_VERSION) {
+        return Err(error);
+    }
     let conversation = dir
         .read_json::<ConversationDocument>(SnapshotFile::Conversation.into())
         .map_err(|error| CliError::storage("read retained conversation", error))?
@@ -140,6 +146,31 @@ fn retained_conversation(
         return Err(identity_mismatch(SnapshotFile::Conversation));
     }
     Ok(conversation)
+}
+
+/// `newer_run_document` when `file` declares a version above `supported`.
+///
+/// Only the `version` field is read, so a newer layout with unknown fields is
+/// still recognised. `None` when the file is unreadable, has no numeric
+/// version or is not newer; the ordinary decoder then reports it.
+#[review_kit_observation::operations]
+#[helper]
+fn newer_document(dir: &RunDir, file: SnapshotFile, supported: u64) -> Option<CliError> {
+    #[derive(Deserialize)]
+    struct Declared {
+        version: u64,
+    }
+    let bytes = dir.read_bytes(file.into()).ok()?;
+    let version = serde_json::from_slice::<Declared>(&bytes).ok()?.version;
+    (version > supported).then(|| {
+        let name = file.name();
+        CliError::state(
+            "newer_run_document",
+            2,
+            format!("{name} version {version} was written by a newer rkc; use that rkc version or a later one for this run"),
+        )
+        .with_details(json!({"file": name, "version": version, "supported": supported}))
+    })
 }
 
 /// Retained files that are missing, do not decode or describe another run, with their codes.
