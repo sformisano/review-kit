@@ -12,7 +12,8 @@ mod preflight;
 mod publish;
 
 use review_kit_application::{
-    publication::{Effects, Snapshot},
+    conversation::WriteTargets,
+    publication::{Effects, Plan, Snapshot},
     use_cases::{
         publication_run::ExecutionEvidence,
         publishing::{
@@ -177,14 +178,20 @@ pub fn require_binding(run: &LoadedRun, binding: &RunBinding) -> Result<(), CliE
     .map_err(|error| error.with_detail("round", json!(binding.round)))
 }
 
-/// The binding request naming this run's accepted assessment and retained files.
+/// The binding request naming this run's accepted assessment and retained
+/// files, with the write targets that the freshness preflight compared.
 #[review_kit_observation::operations]
 #[helper]
-pub fn binding_request(run: &LoadedRun, chain: &AcceptedReview) -> BindingRequest {
+pub fn binding_request(
+    run: &LoadedRun,
+    chain: &AcceptedReview,
+    write_scope: Option<WriteTargets>,
+) -> BindingRequest {
     BindingRequest {
         run_id: run.run_id().clone(),
         review_assessment: chain.assessment.clone(),
         snapshot_files: run.manifest.snapshot_files.clone(),
+        write_scope,
     }
 }
 
@@ -248,7 +255,8 @@ pub fn connect(config: &Config, run: &LoadedRun) -> Result<GitLab, CliError> {
     Ok(gitlab)
 }
 
-/// Check the accepted request offline with the selected renderer before connecting.
+/// Check the accepted request offline with the selected renderer before
+/// connecting, and return its plan against the captured history.
 #[review_kit_observation::operations]
 #[helper]
 pub fn check_offline(
@@ -256,7 +264,7 @@ pub fn check_offline(
     chain: &AcceptedReview,
     renderer: &mut Json2MdRenderer,
     progress: &PublicationProgress,
-) -> Result<(), CliError> {
+) -> Result<Plan, CliError> {
     let snapshot: Snapshot = run.context.snapshot.clone().into_snapshot()?;
     let mut source = retained_source(&run.dir)?;
     let preview =
@@ -270,7 +278,8 @@ pub fn check_offline(
                 )
             })?;
     validate_plan_bodies(&preview)
-        .map_err(|error| CliError::adapter("validate GitLab bodies", "gitlab_body", 2, error))
+        .map_err(|error| CliError::adapter("validate GitLab bodies", "gitlab_body", 2, error))?;
+    Ok(preview)
 }
 
 /// Progress used for offline checks: another run's unresolved intent is not this run's.

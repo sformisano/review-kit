@@ -92,12 +92,15 @@ inputs are known. A link to a new finding remains unresolved until GitLab
 returns its reference. Planning performs no provider writes.
 
 Before the first write, the CLI compares the current head and comparison with
-the run's capture, and the reviewer's own summary and finding threads with their
-captured state. If the author pushed a commit or someone replied in, edited or
-resolved one of those threads, publication stops before writing anything. The
-agent assesses the change in a new run. Comments elsewhere, by people or bots,
-and title or description edits do not stop publication. Publication communicates
-the assessed snapshot, not later events.
+the run's capture. It also compares, with their captured state, the summary note
+and each finding thread where this publication will reply, resolve or reopen.
+If the author pushed a commit, someone edited the summary note, or someone
+replied in, edited or resolved one of those threads, publication stops before
+writing anything. The agent assesses the change in a new run. Replies to the
+summary, replies in the reviewer's other threads, comments elsewhere by people
+or bots, and title or description edits do not stop publication; the next
+review assesses them. Publication communicates the assessed snapshot, not later
+events.
 
 For publication, assume the capture is current, no owned summary
 exists, and the caller grants the required write authority.

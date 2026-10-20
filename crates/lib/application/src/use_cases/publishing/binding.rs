@@ -6,6 +6,7 @@ use super::{
     progress::{PublicationProgress, RoundAuthorization},
     settlement::SettledRun,
 };
+use crate::conversation::WriteTargets;
 use crate::publication::{RoundStatus, Snapshot};
 use crate::review_run::{ContentRef, RunId, SettledOutcome, SnapshotFiles};
 use crate::use_cases::publication_run::Clock;
@@ -17,6 +18,13 @@ pub struct BindingRequest {
     /// Reference to the exact accepted assessment bytes.
     pub review_assessment: ContentRef,
     pub snapshot_files: SnapshotFiles,
+    /// Existing objects that the caller compared with the run's capture.
+    ///
+    /// When present, publication refuses with [`PlanError::UncomparedWrite`],
+    /// before the invocation's first write, an invocation whose plan or
+    /// resumed write targets anything else. `None` leaves the targets
+    /// unchecked, as after a possible dispatch.
+    pub write_scope: Option<WriteTargets>,
 }
 
 /// The review run whose accepted inputs own the journal's current publication.
@@ -74,6 +82,9 @@ pub(super) enum Admission {
 pub(crate) struct BoundInvocation<'a> {
     pub(crate) request: &'a BindingRequest,
     pub(crate) clock: &'a mut dyn Clock,
+    /// The compared write targets that the invocation's writes must stay in,
+    /// until a write of the invocation is dispatched; `None` checks nothing.
+    pub(crate) scope: Option<&'a WriteTargets>,
 }
 
 #[review_kit_observation::operations]

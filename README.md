@@ -196,11 +196,12 @@ the requested operations are allowed by the configuration. GitLab also checks th
 account's permissions and token scope.
 
 Before the first write, the current head and comparison must still equal the
-run's capture, and the reviewer's own summary and finding threads must be
-unchanged. A change fails with `source_changed` or `conversation_changed`
-(exit `3`); assess it in a new run with `rkc run start --new`. Comments by other
-people or bots outside those threads, and title or description edits, do not
-block; the [publication reference](crates/bin/cli/README.md#publication-and-recovery)
+run's capture, and the summary note and the finding threads that the
+publication writes to must be unchanged. A change fails with `source_changed`
+or `conversation_changed` (exit `3`); assess it in a new run with
+`rkc run start --new`. Activity elsewhere, including replies to the summary and
+the reviewer's threads that the publication leaves alone, does not block; the
+[publication reference](crates/bin/cli/README.md#publication-and-recovery)
 defines the rule.
 Publication communicates the assessed snapshot, not later events.
 

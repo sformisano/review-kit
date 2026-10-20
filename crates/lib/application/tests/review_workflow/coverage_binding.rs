@@ -38,6 +38,7 @@ pub(super) fn bind(number: u8, assessment: char) -> BindingRequest {
         run_id: run_id(number),
         review_assessment: content(assessment),
         snapshot_files: files('a'),
+        write_scope: None,
     }
 }
 

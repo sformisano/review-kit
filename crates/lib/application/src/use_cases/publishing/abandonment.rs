@@ -107,7 +107,11 @@ pub fn abandon_bound(
     let mut renderer = crate::ports::ManagedRenderer::new(renderer);
     let mut host = crate::ports::ManagedHost::new(host);
     let mut evidence = crate::use_cases::publication_run::ManagedEvidence::new(evidence);
-    let mut bound = binding.map(|request| BoundInvocation { request, clock });
+    let mut bound = binding.map(|request| BoundInvocation {
+        request,
+        clock,
+        scope: None,
+    });
     abandon_recorded_managed(
         request,
         &mut host,

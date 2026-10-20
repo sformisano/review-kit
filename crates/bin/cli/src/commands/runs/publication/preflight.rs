@@ -1,21 +1,25 @@
 use review_kit_application::{
-    conversation::{ConversationChange, OwnedThreads},
-    publication::Snapshot,
+    conversation::{ConversationChange, WriteTargets},
+    publication::{Plan, Snapshot},
     review_run::RunId,
     use_cases::{
         discovery::discover,
-        publishing::{ManagedHistory, OwnedHistory},
+        publishing::{
+            ManagedHistory, OwnedHistory, PublicationProgress, check_review_with_progress,
+        },
     },
 };
 use review_kit_gitlab_adapter::{BotLookup, GitLab};
+use review_kit_json2md_adapter::Json2MdRenderer;
 use serde_json::{Value, json};
 
 use crate::{
     commands::{
         history,
         runs::{
+            chain::AcceptedReview,
             journal::{JournalReading, pending_owner},
-            loading::LoadedRun,
+            loading::{LoadedRun, retained_source},
         },
     },
     error::CliError,
@@ -42,18 +46,31 @@ pub fn discover_current(gitlab: &GitLab, run: &LoadedRun) -> Result<Snapshot, Cl
     .map_err(|error| history::discovery_error(error, gitlab))
 }
 
-/// Reject a merge request whose source or owned threads changed since the run's capture.
+/// Reject a merge request whose source changed since the run's capture, or
+/// whose conversation changed where this publication writes; return those
+/// write targets for the engine's scope check.
 ///
-/// Revision identity covers the head and full comparison. Conversation changes
-/// count only inside the reviewer's threads of the captured or the current
-/// managed history; ordering and observation time are ignored.
+/// Revision identity covers the head and full comparison. The targets come
+/// from the plan that publication executes: the accepted assessment planned
+/// against `snapshot`, the current discovery, with the run's own `progress`,
+/// and the retained unresolved write of that progress, which recovery resumes
+/// first. When that plan cannot be built, publication writes nothing and the
+/// targets of `preview`, the plan against the captured history, are compared
+/// instead, so a change that broke the plan is reported as a conversation
+/// change. The captured and the current history name the targets' threads.
+/// Conversation changes count only inside them; ordering and observation
+/// time are ignored.
 #[review_kit_observation::operations]
 #[helper]
 pub fn require_fresh(
     gitlab: &GitLab,
     run: &LoadedRun,
     snapshot: &Snapshot,
-) -> Result<(), CliError> {
+    chain: &AcceptedReview,
+    renderer: &mut Json2MdRenderer,
+    progress: &PublicationProgress,
+    preview: &Plan,
+) -> Result<WriteTargets, CliError> {
     let subject = &run.manifest.subject;
     if snapshot.revision != run.manifest.revision {
         return Err(CliError::state(
@@ -66,21 +83,31 @@ pub fn require_fresh(
             "current_head": snapshot.revision.head(),
         })));
     }
+    let executing = check_review_with_progress(
+        &chain.request,
+        snapshot,
+        &mut retained_source(&run.dir)?,
+        renderer,
+        progress,
+    )
+    .ok();
+    let plan = executing.as_ref().unwrap_or(preview);
+    let pending = progress.unresolved.as_ref().map(|pending| &pending.write);
     let current = gitlab
         .capture_conversation(subject, BotLookup::Skip)
         .map_err(CliError::GitLab)?;
     let captured = run.context.snapshot.clone().into_snapshot()?;
-    let owned = OwnedThreads::of([&captured, snapshot]);
-    let changes = current.owned_changes_since(&run.conversation, &owned);
+    let targets = WriteTargets::of(plan, &[&captured, snapshot], pending);
+    let changes = current.changes_to(&run.conversation, &targets);
     if !changes.is_empty() {
         return Err(CliError::state(
             "conversation_changed",
             3,
-            "the reviewer's own merge-request threads changed since this run captured them; start a new run with rkc run start --new",
+            "a thread that this publication writes to changed since this run captured it; start a new run with rkc run start --new",
         )
         .with_details(json!({"changes": changes.iter().map(change).collect::<Vec<_>>()})));
     }
-    Ok(())
+    Ok(targets)
 }
 
 /// Refuse a new publication while another run owns unfinished publication.

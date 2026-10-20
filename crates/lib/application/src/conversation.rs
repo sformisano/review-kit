@@ -10,15 +10,16 @@
 //! user identity only; account details such as the username are context.
 //! Observation time and provider ordering are not part of the model.
 //!
-//! Publication freshness considers only [`OwnedThreads`]: the discussions where
-//! publication writes. Activity elsewhere, including title and description
-//! edits, does not make an assessed snapshot stale.
+//! Publication freshness considers only [`WriteTargets`]: the summary note and
+//! the finding threads that one publication writes to. Activity elsewhere,
+//! including the reviewer's other threads and title and description edits,
+//! does not make an assessed snapshot stale.
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use review_kit_domain::{ReviewerId, Subject};
+use review_kit_domain::{FindingId, ReviewerId, Subject};
 
-use crate::publication::{ProviderId, Snapshot};
+use crate::publication::{Plan, PlannedAction, ProviderId, Snapshot, Write};
 
 /// Canonical JSON text of one provider position object.
 ///
@@ -324,30 +325,25 @@ impl Conversation {
         self.changes_since(other).is_empty()
     }
 
-    /// The changes from `retained` inside `owned` threads, in a stable order.
+    /// The changes from `retained` that touch `targets`, in a stable order.
     ///
-    /// A discussion is in scope when it is an owned finding discussion or
-    /// holds an owned summary note in either conversation, so a thread owned
-    /// at capture stays in scope after it disappears. A note-level change is in
-    /// scope when the note's discussion in either conversation is. Every
-    /// change in scope is reported, whoever made it, because publication can
-    /// update, answer, resolve or reopen those threads. A different review
-    /// subject is always reported. Title, description and other discussions
-    /// are out of scope.
-    pub fn owned_changes_since(
-        &self,
-        retained: &Self,
-        owned: &OwnedThreads,
-    ) -> Vec<ConversationChange> {
-        let scope = owned.discussions_in([retained, self]);
+    /// Any change inside a target thread is reported, whoever made it,
+    /// including its removal and notes moved into or out of it. A target
+    /// summary note counts as a note only: its appearance, an edit, a move or
+    /// its removal is reported, while replies in its discussion and that
+    /// discussion's resolution are not. A different review subject is always
+    /// reported. Title, description and every other discussion are out of
+    /// scope.
+    pub fn changes_to(&self, retained: &Self, targets: &WriteTargets) -> Vec<ConversationChange> {
         let before = retained.notes_by_id();
         let after = self.notes_by_id();
-        let note_in_scope = |note: &ProviderId| {
+        let in_thread = |note: &ProviderId| {
             [before.get(note), after.get(note)]
                 .into_iter()
                 .flatten()
-                .any(|(discussion, _)| scope.contains(*discussion))
+                .any(|(discussion, _)| targets.threads.contains(*discussion))
         };
+        let in_scope = |note: &ProviderId| targets.summary_notes.contains(note) || in_thread(note);
         self.changes_since(retained)
             .into_iter()
             .filter(|change| match change {
@@ -355,15 +351,25 @@ impl Conversation {
                 ConversationChange::Title | ConversationChange::Description => false,
                 ConversationChange::DiscussionAdded(discussion)
                 | ConversationChange::DiscussionRemoved(discussion)
-                | ConversationChange::ResolutionChanged { discussion, .. }
-                | ConversationChange::NoteAdded { discussion, .. }
-                | ConversationChange::NoteRemoved { discussion, .. } => scope.contains(discussion),
+                | ConversationChange::ResolutionChanged { discussion, .. } => {
+                    targets.threads.contains(discussion)
+                }
+                ConversationChange::NoteAdded { discussion, note }
+                | ConversationChange::NoteRemoved { discussion, note } => {
+                    targets.threads.contains(discussion) || targets.summary_notes.contains(note)
+                }
                 ConversationChange::NoteMoved {
-                    retained, current, ..
-                } => scope.contains(retained) || scope.contains(current),
+                    note,
+                    retained,
+                    current,
+                } => {
+                    targets.threads.contains(retained)
+                        || targets.threads.contains(current)
+                        || targets.summary_notes.contains(note)
+                }
                 ConversationChange::NoteAuthorChanged(note)
                 | ConversationChange::NoteBodyChanged(note)
-                | ConversationChange::NotePositionChanged(note) => note_in_scope(note),
+                | ConversationChange::NotePositionChanged(note) => in_scope(note),
             })
             .collect()
     }
@@ -388,69 +394,77 @@ impl Conversation {
     }
 }
 
-/// The reviewer's threads in verified managed history: owned summary notes
-/// and owned finding root discussions.
+/// The existing provider objects that one publication invocation writes to:
+/// the reviewer's summary notes and the finding threads that receive a reply,
+/// a resolve or a reopen.
 ///
-/// Publication writes only there. It updates the summary note, and it replies
-/// in, resolves and reopens finding threads. Discovery establishes these
-/// records from the authenticated API author and corroborated markers, so a
-/// marker copied into another author's note never makes a thread owned.
+/// New finding threads are absent because they do not exist before the
+/// invocation writes them.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct OwnedThreads {
+pub struct WriteTargets {
     summary_notes: BTreeSet<ProviderId>,
-    finding_discussions: BTreeSet<ProviderId>,
+    threads: BTreeSet<ProviderId>,
 }
 
-impl OwnedThreads {
-    /// The threads that each history's own reviewer authored.
+impl WriteTargets {
+    /// The targets of executing `plan`, after the retained `pending` write.
     ///
-    /// Each history is a verified discovery of the conversation's subject for
-    /// the publishing reviewer. Publication passes the history captured with
-    /// the retained conversation and the current discovery, so threads that
-    /// the reviewer created after capture are owned too.
-    pub fn of<'a>(histories: impl IntoIterator<Item = &'a Snapshot>) -> Self {
-        let mut owned = Self::default();
+    /// Each history is a verified discovery of the plan's subject. A plan
+    /// with any write updates the reviewer's summary, so every history's
+    /// summary note by its own reviewer is a target; passing the history
+    /// captured with the assessment keeps a summary that later disappeared in
+    /// scope. Reply and resolution actions name findings; their threads are
+    /// the matching owned roots of every history. An unchanged plan writes
+    /// nothing and has no targets of its own.
+    pub fn of(plan: &Plan, histories: &[&Snapshot], pending: Option<&Write>) -> Self {
+        let mut targets = Self::default();
+        let findings: BTreeSet<FindingId> = plan
+            .actions
+            .iter()
+            .filter_map(|action| match action {
+                PlannedAction::Reply { finding, .. }
+                | PlannedAction::SetResolved { finding, .. } => Some(*finding),
+                PlannedAction::Finding { .. } => None,
+            })
+            .collect();
         for history in histories {
-            owned.summary_notes.extend(
-                history
-                    .summaries
-                    .iter()
-                    .filter(|summary| summary.author == history.reviewer)
-                    .map(|summary| summary.id.clone()),
-            );
-            owned.finding_discussions.extend(
+            if !plan.unchanged {
+                targets.summary_notes.extend(
+                    history
+                        .summaries
+                        .iter()
+                        .filter(|summary| summary.author == history.reviewer)
+                        .map(|summary| summary.id.clone()),
+                );
+            }
+            targets.threads.extend(
                 history
                     .findings
                     .iter()
-                    .filter(|root| root.author == history.reviewer)
+                    .filter(|root| {
+                        root.author == history.reviewer && findings.contains(&root.finding.id())
+                    })
                     .map(|root| root.id.clone()),
             );
         }
-        owned
+        match pending {
+            Some(Write::Summary {
+                expected: Some(summary),
+                ..
+            }) => {
+                targets.summary_notes.insert(summary.id.clone());
+            }
+            Some(Write::Reply { thread, .. } | Write::SetResolved { thread, .. }) => {
+                targets.threads.insert(thread.clone());
+            }
+            Some(Write::Summary { expected: None, .. } | Write::Finding { .. }) | None => {}
+        }
+        targets
     }
 
-    /// Owned finding discussions, and each discussion of `conversations` that
-    /// holds an owned summary note.
-    fn discussions_in<'a>(
-        &'a self,
-        conversations: [&'a Conversation; 2],
-    ) -> BTreeSet<&'a ProviderId> {
-        let mut scope: BTreeSet<&ProviderId> = self.finding_discussions.iter().collect();
-        for conversation in conversations {
-            scope.extend(
-                conversation
-                    .discussions
-                    .iter()
-                    .filter(|discussion| {
-                        discussion
-                            .notes
-                            .iter()
-                            .any(|note| self.summary_notes.contains(&note.id))
-                    })
-                    .map(|discussion| &discussion.id),
-            );
-        }
-        scope
+    /// True when every target of `other` is also a target here.
+    pub fn covers(&self, other: &Self) -> bool {
+        other.summary_notes.is_subset(&self.summary_notes) && other.threads.is_subset(&self.threads)
     }
 }
 

@@ -84,6 +84,13 @@ pub enum Fault {
         ready: SyncSender<()>,
         release: Receiver<()>,
     },
+    /// Answer a read normally after `skip_matches` earlier matches, then
+    /// apply `change`, as another client acting between two reads would.
+    ChangeAfterRead {
+        target: String,
+        skip_matches: usize,
+        change: Box<dyn FnOnce(&mut State) + Send>,
+    },
 }
 
 impl Fault {
@@ -159,6 +166,21 @@ impl Fault {
             release,
         }
     }
+    #[allow(
+        dead_code,
+        reason = "The CLI integration suite changes the merge request between two reads of one command."
+    )]
+    pub fn change_after_read(
+        target: &str,
+        skip_matches: usize,
+        change: impl FnOnce(&mut State) + Send + 'static,
+    ) -> Self {
+        Self::ChangeAfterRead {
+            target: target.into(),
+            skip_matches,
+            change: Box::new(change),
+        }
+    }
     fn matches(&self, request: &Request) -> bool {
         match self {
             Self::Respond { method, target, .. } => {
@@ -171,7 +193,9 @@ impl Fault {
             Self::LateCreation { target, .. } => {
                 request.method == "POST" && request.path == *target
             }
-            Self::HoldRead { target, .. } | Self::PauseRead { target, .. } => {
+            Self::HoldRead { target, .. }
+            | Self::PauseRead { target, .. }
+            | Self::ChangeAfterRead { target, .. } => {
                 request.method == "GET" && request.path == *target
             }
         }

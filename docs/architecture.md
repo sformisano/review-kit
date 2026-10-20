@@ -98,7 +98,7 @@ These use cases support the [command contract](workflow.md#command-contract).
 | Render | Checked artifact view and trusted profile | Complete body or rendering error | None |
 | Inspect | Subject and configured provider | Authenticated identity, revisions, existing objects, capability limits | Reads |
 | Discover review context | Verified snapshot and revision-bound change data | Changed files, diff, findings, replies, history, next ID | Reads |
-| Compare owned threads | Retained and fresh supported conversation, with the captured and current managed history | The changes inside the reviewer's summary and finding threads; none means the assessed snapshot is current | None; the GitLab adapter reads the conversation |
+| Compare write targets | Retained and fresh supported conversation, the plan that executes and a retained write to resume, with the captured and current managed history | The changes to the summary note and the finding threads that the publication writes to; none means the assessed snapshot is current there | None; the GitLab adapter reads the conversation |
 | Plan | Assessment and current provider/source observations | Required effects, known bodies, and unresolved references; conflicts stop planning | Reads |
 | Publish | Assessment, authority, profile, provider, source access, caller-carried progress, optional run binding | Verified effects, an accurate publication status and, for a bound run, its settlement | Explicitly authorized writes |
 | Inspect or resume a retained round through plan/publish | Retained assessment and discovered round state | Current status, then optionally execution of missing effects | Reads; writes only for authorized publication |
@@ -285,9 +285,12 @@ Application tests exercise this distinction through fake provider and renderer p
 | Another run's binding sent nothing | Release it, restore the earlier grant and admit the new run | None |
 
 Before the first possible dispatch, the CLI also stops when the head or comparison
-differs from the run's capture, or when one of the reviewer's own threads changed
-since it. After a possible dispatch, recovery uses the original capture and the
-engine's per-effect checks.
+differs from the run's capture, or when an existing object that the publication
+writes to changed since it. The engine refuses a round whose writes leave the
+compared objects before it records an intent. After a possible dispatch,
+recovery uses the original capture and the engine's per-effect checks. The
+[publication reference](../crates/bin/cli/README.md#publication-and-recovery)
+gives the check order for each command.
 
 An empty listing after an uncertain write does not establish that the write failed.
 The [progress contract](../crates/lib/application/README.md#publication-and-recovery) requires retaining that unresolved attempt across calls.

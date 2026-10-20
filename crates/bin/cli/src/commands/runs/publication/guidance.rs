@@ -51,6 +51,19 @@ pub fn changed_revision(round: Option<u64>) -> Value {
     })
 }
 
+/// The engine refused a round that would write to an existing summary note
+/// or finding thread outside the targets that the freshness preflight
+/// compared; it stopped before recording any write intent.
+#[review_kit_observation::operations]
+#[helper]
+pub fn uncompared_write() -> Value {
+    json!({
+        "code": "uncompared_write",
+        "message": "the publication would write to an existing summary note or finding thread that the freshness preflight did not compare, so it stopped before any write",
+        "next": "The reviewer's history on the merge request changed after the freshness preflight. Start a fresh run with rkc run start --new.",
+    })
+}
+
 /// Whether a refused recovery comes from the run's frozen inputs, which no
 /// retry can change: the current provider state no longer admits them.
 ///

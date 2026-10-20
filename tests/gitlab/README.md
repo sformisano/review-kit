@@ -124,11 +124,14 @@ The scenarios verify:
   from independent account reads. System notes are excluded. Edited and
   deleted notes are reflected. A later edit and resolution change are
   reported as differences from the capture.
-- Publication freshness scoped to the reviewer's threads with real discovery.
-  After a published round, notes by the commenter and the bot, a diff thread
-  that copies a finding marker, a foreign resolution and title and description
-  edits are outside the scope; the author's reply and resolution in the
-  reviewer's finding thread are the only owned changes.
+- Publication freshness scoped to the write targets of a planned round with
+  real discovery. After a published round with two findings, a plan that fixes
+  finding 1 targets the summary note and finding 1's thread. Notes by the
+  commenter and the bot, a diff thread that copies a finding marker, a foreign
+  resolution, title and description edits, a reply to the summary, and the
+  author's and the bot's replies and a resolution in finding 2's thread are
+  outside the targets; the author's reply and resolution in finding 1's thread
+  are the only changes reported.
 
 An independent REST fixture client inspects GitLab state after application
 operations. A deterministic renderer supplies test bodies; this suite does not

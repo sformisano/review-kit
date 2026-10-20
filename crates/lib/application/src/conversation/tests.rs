@@ -290,8 +290,9 @@ fn positions_require_object_text() {
 }
 
 /// The reviewer's summary note `100` alone in `summary`, its finding thread
-/// `finding` with an author question, a foreign diff thread and a bot note.
-fn reviewed() -> Result<(Conversation, OwnedThreads), Box<dyn Error>> {
+/// `finding` with an author question, a foreign diff thread and a bot note,
+/// with a publication that updates the summary and writes in `finding`.
+fn reviewed() -> Result<(Conversation, WriteTargets), Box<dyn Error>> {
     let conversation = Conversation::new(
         subject(1)?,
         "Accept JSON input".into(),
@@ -322,11 +323,11 @@ fn reviewed() -> Result<(Conversation, OwnedThreads), Box<dyn Error>> {
             )?,
         ],
     )?;
-    let owned = OwnedThreads {
+    let targets = WriteTargets {
         summary_notes: BTreeSet::from([id("100")?]),
-        finding_discussions: BTreeSet::from([id("finding")?]),
+        threads: BTreeSet::from([id("finding")?]),
     };
-    Ok((conversation, owned))
+    Ok((conversation, targets))
 }
 
 fn with_text(
@@ -344,8 +345,8 @@ fn with_text(
 }
 
 #[test]
-fn foreign_activity_and_request_text_are_outside_the_owned_scope() -> TestResult {
-    let (retained, owned) = reviewed()?;
+fn foreign_activity_and_request_text_are_outside_the_targets() -> TestResult {
+    let (retained, targets) = reviewed()?;
     let edited = rebuild(&retained, |parts| {
         let foreign = &mut parts[2];
         foreign.1 = Resolution::Resolved;
@@ -378,13 +379,13 @@ fn foreign_activity_and_request_text_are_outside_the_owned_scope() -> TestResult
         "A new description.",
     )?;
     assert_eq!(current.changes_since(&retained).len(), 11);
-    assert_eq!(current.owned_changes_since(&retained, &owned), []);
+    assert_eq!(current.changes_to(&retained, &targets), []);
     Ok(())
 }
 
 #[test]
-fn every_change_inside_an_owned_thread_is_reported() -> TestResult {
-    let (retained, owned) = reviewed()?;
+fn every_change_inside_a_target_thread_and_to_the_summary_note_is_reported() -> TestResult {
+    let (retained, targets) = reviewed()?;
     let moved_anchor = r#"{"new_line":4,"new_path":"src/lib.rs","position_type":"text"}"#;
     let current = rebuild(&retained, |parts| {
         parts[0].1 = Resolution::Unresolved;
@@ -400,26 +401,19 @@ fn every_change_inside_an_owned_thread_is_reported() -> TestResult {
         finding.2.push(note("202", "5", "One more case.", None)?);
         Ok(())
     })?;
+    // The reply to the summary and its discussion's resolution are not changes
+    // to the summary note itself.
     assert_eq!(
-        current.owned_changes_since(&retained, &owned),
+        current.changes_to(&retained, &targets),
         [
             ConversationChange::ResolutionChanged {
                 discussion: id("finding")?,
                 retained: Resolution::Unresolved,
                 current: Resolution::Resolved,
             },
-            ConversationChange::ResolutionChanged {
-                discussion: id("summary")?,
-                retained: Resolution::NotResolvable,
-                current: Resolution::Unresolved,
-            },
             ConversationChange::NoteAdded {
                 discussion: id("finding")?,
                 note: id("202")?,
-            },
-            ConversationChange::NoteAdded {
-                discussion: id("summary")?,
-                note: id("101")?,
             },
             ConversationChange::NoteAuthorChanged(id("201")?),
             ConversationChange::NoteBodyChanged(id("100")?),
@@ -431,8 +425,8 @@ fn every_change_inside_an_owned_thread_is_reported() -> TestResult {
 }
 
 #[test]
-fn removed_owned_threads_and_notes_moved_across_the_boundary_stay_in_scope() -> TestResult {
-    let (retained, owned) = reviewed()?;
+fn removed_targets_and_notes_moved_across_the_boundary_stay_in_scope() -> TestResult {
+    let (retained, targets) = reviewed()?;
     let current = rebuild(&retained, |parts| {
         let summary = parts.remove(0);
         let question = parts[0].2.remove(1);
@@ -443,10 +437,8 @@ fn removed_owned_threads_and_notes_moved_across_the_boundary_stay_in_scope() -> 
         Ok(())
     })?;
     assert_eq!(
-        current.owned_changes_since(&retained, &owned),
+        current.changes_to(&retained, &targets),
         [
-            ConversationChange::DiscussionAdded(id("summary-copy")?),
-            ConversationChange::DiscussionRemoved(id("summary")?),
             ConversationChange::NoteMoved {
                 note: id("100")?,
                 retained: id("summary")?,
@@ -469,7 +461,7 @@ fn removed_owned_threads_and_notes_moved_across_the_boundary_stay_in_scope() -> 
         Ok(())
     })?;
     assert_eq!(
-        without_finding.owned_changes_since(&retained, &owned),
+        without_finding.changes_to(&retained, &targets),
         [
             ConversationChange::DiscussionRemoved(id("finding")?),
             ConversationChange::NoteRemoved {
@@ -486,45 +478,53 @@ fn removed_owned_threads_and_notes_moved_across_the_boundary_stay_in_scope() -> 
 }
 
 #[test]
-fn a_thread_owned_only_in_the_current_history_is_in_scope() -> TestResult {
-    let (retained, _) = reviewed()?;
+fn a_deleted_summary_note_is_a_change_but_its_discussion_is_not_a_thread() -> TestResult {
+    let (retained, targets) = reviewed()?;
     let current = rebuild(&retained, |parts| {
-        parts.push((
-            id("new-summary")?,
-            Resolution::NotResolvable,
-            vec![note("700", "42", "Another run's summary.", None)?],
-        ));
-        parts.push((
-            id("new-finding")?,
-            Resolution::Unresolved,
-            vec![note("800", "42", "Another run's finding.", Some(ANCHOR))?],
-        ));
+        parts.remove(0);
         Ok(())
     })?;
-    let owned = OwnedThreads {
-        summary_notes: BTreeSet::from([id("700")?]),
-        finding_discussions: BTreeSet::from([id("new-finding")?]),
-    };
     assert_eq!(
-        current.owned_changes_since(&retained, &owned),
-        [
-            ConversationChange::DiscussionAdded(id("new-finding")?),
-            ConversationChange::DiscussionAdded(id("new-summary")?),
-            ConversationChange::NoteAdded {
-                discussion: id("new-finding")?,
-                note: id("800")?,
-            },
-            ConversationChange::NoteAdded {
-                discussion: id("new-summary")?,
-                note: id("700")?,
-            },
-        ]
+        current.changes_to(&retained, &targets),
+        [ConversationChange::NoteRemoved {
+            discussion: id("summary")?,
+            note: id("100")?,
+        }]
     );
     Ok(())
 }
 
 #[test]
-fn without_owned_threads_only_a_different_subject_is_reported() -> TestResult {
+fn an_own_thread_without_a_planned_effect_is_outside_the_targets() -> TestResult {
+    let (retained, _) = reviewed()?;
+    let summary_only = WriteTargets {
+        summary_notes: BTreeSet::from([id("100")?]),
+        threads: BTreeSet::new(),
+    };
+    let current = rebuild(&retained, |parts| {
+        parts[0]
+            .2
+            .push(note("101", "77", "A reply to the summary.", None)?);
+        let finding = &mut parts[1];
+        finding.1 = Resolution::Resolved;
+        finding.2.push(note("202", "91", "Automated reply.", None)?);
+        finding.2[1].body = "Edited question.".into();
+        Ok(())
+    })?;
+    assert_eq!(current.changes_to(&retained, &summary_only), []);
+    let edited = rebuild(&current, |parts| {
+        parts[0].2[0].body = "Edited summary.".into();
+        Ok(())
+    })?;
+    assert_eq!(
+        edited.changes_to(&retained, &summary_only),
+        [ConversationChange::NoteBodyChanged(id("100")?)]
+    );
+    Ok(())
+}
+
+#[test]
+fn without_targets_only_a_different_subject_is_reported() -> TestResult {
     let (retained, _) = reviewed()?;
     let edited = rebuild(&retained, |parts| {
         parts[1].1 = Resolution::Resolved;
@@ -532,13 +532,13 @@ fn without_owned_threads_only_a_different_subject_is_reported() -> TestResult {
         parts.remove(0);
         Ok(())
     })?;
-    let none = OwnedThreads::default();
+    let none = WriteTargets::default();
     let same = with_text(&edited, subject(1)?, "New title", "New description")?;
     assert!(!same.changes_since(&retained).is_empty());
-    assert_eq!(same.owned_changes_since(&retained, &none), []);
+    assert_eq!(same.changes_to(&retained, &none), []);
     let other = with_text(&edited, subject(2)?, "New title", "New description")?;
     assert_eq!(
-        other.owned_changes_since(&retained, &none),
+        other.changes_to(&retained, &none),
         [ConversationChange::Subject]
     );
     Ok(())
@@ -546,7 +546,7 @@ fn without_owned_threads_only_a_different_subject_is_reported() -> TestResult {
 
 #[test]
 fn author_accounts_are_context_and_never_a_change() -> TestResult {
-    let (retained, owned) = reviewed()?;
+    let (retained, targets) = reviewed()?;
     let current = rebuild(&retained, |parts| {
         for (_, _, notes) in parts.iter_mut() {
             for note in notes.iter_mut() {
@@ -568,13 +568,13 @@ fn author_accounts_are_context_and_never_a_change() -> TestResult {
     assert_ne!(current, retained);
     assert_eq!(current.changes_since(&retained), []);
     assert!(current.matches(&retained));
-    assert_eq!(current.owned_changes_since(&retained, &owned), []);
+    assert_eq!(current.changes_to(&retained, &targets), []);
     let reassigned = rebuild(&retained, |parts| {
         parts[1].2[1].author = ReviewerId::try_from("6".to_owned())?;
         Ok(())
     })?;
     assert_eq!(
-        reassigned.owned_changes_since(&retained, &owned),
+        reassigned.changes_to(&retained, &targets),
         [ConversationChange::NoteAuthorChanged(id("201")?)]
     );
     Ok(())

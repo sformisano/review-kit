@@ -147,12 +147,16 @@ defines continuation limits. The [CLI reference](../crates/bin/cli/README.md#pro
   tell reusable confirmations from earlier unenforced validation without reading local role records.
 - Limit private `local_context` to 2000 characters of pointers and decisive facts.
 - Capture the supported merge-request conversation as context only.
-  Before the first possible dispatch, require the current revision to equal the capture and the reviewer's own threads to be unchanged:
-  the discussion of its owned summary and its owned finding threads, as discovery verifies them from the API author and corroborated markers.
-  Any change inside those threads blocks, because publication updates, answers, resolves or reopens them.
-  Other people's and bots' notes, threads and resolutions, and title or description edits, do not block; publication never writes to them.
+  Before the first possible dispatch, require the current revision to equal the capture and the existing objects that this publication writes to to be unchanged:
+  the reviewer's summary note, and each finding thread that receives a transition reply, an answer, a resolve or a reopen.
+  Take them from the plan that executes, computed before the comparison, and let the engine refuse any write to an existing object outside the compared set before it records an intent.
+  Any change inside a target thread blocks, whoever made it, because it can make the planned reply or resolution wrong.
+  For the summary, only a change to the note itself blocks.
+  Replies to the summary, changes in the reviewer's finding threads without a planned effect, activity by other people and bots elsewhere, and title or description edits do not block:
+  publication does not write there, and the next review assesses them.
   Comparing the whole conversation is rejected: a later comment by another person or a bot then stops publication
   and forces a fresh assessment, which can reverse confirmed findings.
+  Comparing every thread of the reviewer is rejected for the same reason: a reply in a thread that the round leaves alone, or a reply to the summary, then stops a publication that does not touch it.
   Publication communicates the assessed snapshot, not later events.
 - Retain each captured note author's username and the provider's bot status beside the numeric author ID,
   so review agents can tell bots such as GitLab Duo from people, also inside the reviewer's own threads.

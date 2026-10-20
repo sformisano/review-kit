@@ -278,29 +278,17 @@ pub fn authority_and_abandonment(fixture: &mut Fixture, prior: &Path) -> Result<
     assert_eq!(state["history"][0]["status"], "abandoned");
     assert_eq!(state["history"][0]["abandonment"]["reason"], reason);
     // The other worktree's run retained the conversation before the summary
-    // changed, so it cannot publish; a fresh equivalent run publishes nothing.
-    let stale = fixture.rkc(
-        "control-followup-stale",
-        &other,
-        &review,
-        CliOptions {
-            expected: 3,
-            ..with(&full)
-        },
-    )?;
-    assert_eq!(first_code(&stale), "conversation_changed");
-    let stopped = fixture.rkc(
-        "control-followup-stop",
-        &other,
-        &[
-            "run",
-            "stop",
-            "--reason",
-            "The review conversation changed.",
-        ],
-        with(&full),
-    )?;
-    assert_eq!(stopped["status"], "stopped");
+    // changed. Against the current history its equivalent assessment plans no
+    // write, so no write target is compared and it settles without writes; a
+    // fresh equivalent run does the same.
+    let stale = fixture.rkc("control-followup-stale", &other, &review, with(&full))?;
+    let result = &stale["run"]["outcome"]["result"];
+    assert_eq!(result["status"], "unchanged");
+    assert_eq!(result["attempted"], json!([]));
+    assert_eq!(stale["settlement"]["outcome"], "no_changes");
+    let after = fixture.observe("control-followup-stale", &mr)?;
+    assert_eq!(authored_notes(&after), authored_notes(&before));
+    assert_eq!(authored_discussions(&after), authored_discussions(&before));
     let unchanged = fixture.start("control-unchanged-start", &other, &mr, with(&full))?;
     reuse(
         fixture,
@@ -324,7 +312,7 @@ pub fn authority_and_abandonment(fixture: &mut Fixture, prior: &Path) -> Result<
     assert_eq!(notes[0]["id"], pending_note);
     write_json(
         directory.join("result.json"),
-        &json!({"status": "passed", "mr": mr["url"], "checks": ["read_only_plan", "empty_authority", "wrong_reviewer", "partial", "unresolved_other_worktree", "abandon", "new_round", "stale_conversation", "unchanged"]}),
+        &json!({"status": "passed", "mr": mr["url"], "checks": ["read_only_plan", "empty_authority", "wrong_reviewer", "partial", "unresolved_other_worktree", "abandon", "new_round", "stale_capture_unchanged", "unchanged"]}),
     )?;
     Ok(())
 }

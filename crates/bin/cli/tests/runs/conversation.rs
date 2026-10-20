@@ -223,7 +223,7 @@ fn only_an_intact_conversation_counts_as_newer() {
     );
     harness.fails(&["check"], 2, "hash_mismatch");
 
-    for shape in [json!([3]), json!({"version": 3}), {
+    for shape in [json!(["review_conversation", 3]), json!({"version": 3}), {
         let mut other = newer.clone();
         other["kind"] = "review_context".into();
         other

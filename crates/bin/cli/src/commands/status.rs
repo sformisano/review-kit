@@ -21,7 +21,7 @@ pub fn run_exit(report: &RunReport) -> u8 {
 
 pub fn plan_exit(error: &PlanError) -> u8 {
     match error {
-        PlanError::ChangedRevision => 3,
+        PlanError::ChangedRevision | PlanError::UncomparedWrite => 3,
         PlanError::WrongReviewer => 4,
         PlanError::ProgressBinding => 5,
         PlanError::Discovery(error) => discovery_exit(error),
@@ -203,6 +203,7 @@ mod tests {
         );
         assert_eq!(bundle_exit(&BundleError::WrongSubject), 5);
         assert_eq!(bundle_exit(&BundleError::ChangedRevision), 3);
+        assert_eq!(plan_exit(&PlanError::UncomparedWrite), 3);
         for (cause, expected) in [
             (GitLabError::RevisionChanged, 3),
             (GitLabError::Conflict, 5),

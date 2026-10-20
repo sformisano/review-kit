@@ -92,6 +92,7 @@ pub fn execute(
         run_id: binding.run_id.clone(),
         review_assessment: binding.review_assessment.clone(),
         snapshot_files: binding.snapshot_files.clone(),
+        write_scope: None,
     };
     let mut host = gitlab.publication_host(session.config.authority());
     let mut clock = SystemClock;

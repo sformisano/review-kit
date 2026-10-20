@@ -1,12 +1,13 @@
 //! Conversation freshness on a real server: activity by another person and a
 //! project access token bot, copied Review Kit markers and title and
 //! description edits after capture do not stop publication, which writes only
-//! its planned effects and leaves that activity untouched. A reply in the
-//! reviewer's finding thread or a resolution change there still stops it
-//! before any write. The retained capture names each note author and the bot
-//! state that GitLab reports for the account.
+//! its planned effects and leaves that activity untouched. Neither do replies
+//! and a resolution change in a reviewer's thread that the round leaves alone,
+//! or a reply to the summary. A reply or a resolution change in a thread that
+//! the round answers in stops it before any write. The retained capture names
+//! each note author and the bot state that GitLab reports for the account.
 
-use super::super::fixture::{Api, authored_notes, read_json};
+use super::super::fixture::{Api, authored_notes, read_json, summary_state};
 use super::super::{
     assessments,
     fixture::{CliOptions, Fixture},
@@ -62,6 +63,64 @@ fn discussion<'a>(observed: &'a Value, id: &Value) -> Result<&'a Value> {
         .iter()
         .find(|discussion| discussion["id"] == *id)
         .context("observed discussion")
+}
+
+/// The observed discussion that holds the note with `note`.
+fn discussion_of<'a>(observed: &'a Value, note: &Value) -> Result<&'a Value> {
+    observed["discussions"]
+        .as_array()
+        .context("observed discussions")?
+        .iter()
+        .find(|discussion| {
+            discussion["notes"]
+                .as_array()
+                .is_some_and(|notes| notes.iter().any(|candidate| candidate["id"] == *note))
+        })
+        .context("discussion of note")
+}
+
+/// Each note's ID, author, body and resolution state, in thread order.
+fn thread_state(discussion: &Value) -> Vec<Value> {
+    discussion["notes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|note| {
+            json!([
+                note["id"],
+                note["author"]["id"],
+                note["body"],
+                note["resolvable"],
+                note["resolved"]
+            ])
+        })
+        .collect()
+}
+
+/// Require the published summary `summary` to record round `round` with
+/// `question` as its only answered note.
+fn answered_only(
+    fixture: &Fixture,
+    observed: &Value,
+    summary: &Value,
+    round: u64,
+    question: &Value,
+) -> Result<()> {
+    let (summaries, _) = fixture.owned(observed);
+    ensure!(summaries.len() == 1 && summaries[0]["id"] == *summary);
+    let state = summary_state(&summaries[0]);
+    ensure!(state["current"]["number"] == round, "summary round");
+    let targets: Vec<&Value> = state["current"]["answer_targets"]
+        .as_array()
+        .context("answer targets")?
+        .iter()
+        .map(|target| &target["id"])
+        .collect();
+    ensure!(
+        targets == [&json!(question.to_string())],
+        "round {round} summary records answered notes {targets:?}"
+    );
+    Ok(())
 }
 
 /// Post a reply in a discussion and return its note ID.
@@ -120,7 +179,7 @@ fn refused(
             "run",
             "stop",
             "--reason",
-            "The reviewer's own thread changed after capture.",
+            "A thread that this publication writes to changed after capture.",
         ],
         CliOptions::default(),
     )?;
@@ -272,7 +331,7 @@ pub fn conversation_freshness_scope(mut fixture: Fixture) -> Result<()> {
     let finding_thread = roots[&1]["id"].clone();
     let audit_thread = roots[&2]["id"].clone();
 
-    // Second round: owned threads exist; activity outside them still does not block.
+    // Second round: owned threads exist; activity outside them does not block.
     let question = reply(
         &fixture.author,
         &path,
@@ -403,16 +462,18 @@ pub fn conversation_freshness_scope(mut fixture: Fixture) -> Result<()> {
         "the answer reply is in the finding thread"
     );
 
-    // A reply by the author inside the reviewer's finding thread blocks.
+    // Third round answers in finding 2's thread only. Replies by a person
+    // and a bot and a resolution change in finding 1's thread, which the round
+    // leaves alone, and a reply to the summary do not block.
     let second = reply(
         &commenter,
         &path,
         &audit_thread,
         "Should the audit failure at least be counted?",
     )?;
-    let owned_reply = answering(
+    let untouched = answering(
         &mut fixture,
-        "freshness-owned-reply",
+        "freshness-untouched",
         &worktree,
         &mr,
         &answered,
@@ -424,47 +485,129 @@ pub fn conversation_freshness_scope(mut fixture: Fixture) -> Result<()> {
         &finding_thread,
         "One more case: negative input.",
     )?;
-    refused(
-        &mut fixture,
-        "freshness-owned-reply",
-        &owned_reply,
-        &mr,
-        json!([{"kind": "note_added", "discussion": finding_thread, "note": late.to_string()}]),
-    )?;
-
-    // A resolution change on the reviewer's thread blocks.
-    let owned_resolution = answering(
-        &mut fixture,
-        "freshness-owned-resolution",
-        &worktree,
-        &mr,
-        &answered,
-        &[(2, &second)],
+    reply(
+        &bot,
+        &path,
+        &finding_thread,
+        "Automated note: the linked issue moved.",
     )?;
     fixture.author.put(
-        &format!("{threads}/{}", audit_thread.as_str().unwrap()),
+        &format!("{threads}/{}", finding_thread.as_str().unwrap()),
+        &json!({"resolved": true}),
+    )?;
+    let observed = fixture.observe("freshness-untouched-summary", &mr)?;
+    let summary_thread = discussion_of(&observed, &summary_id)?["id"].clone();
+    let summary_reply = reply(
+        &commenter,
+        &path,
+        &summary_thread,
+        "Thanks, the summary helps.",
+    )?;
+    let before = fixture.observe("freshness-untouched-before", &mr)?;
+    let planned = plan(
+        &mut fixture,
+        "freshness-untouched-plan",
+        &untouched,
+        CliOptions::default(),
+    )?;
+    let (_, result) = publish(
+        &mut fixture,
+        "freshness-untouched-publish",
+        &untouched,
+        "completed",
+        CliOptions::default(),
+    )?;
+    ensure!(result["round"] == 3);
+    ensure!(
+        result["planned"] == planned["run"]["outcome"]["plan"]["actions"],
+        "publication wrote other effects than its plan"
+    );
+    let after = fixture.observe("freshness-untouched", &mr)?;
+    ensure!(
+        foreign(&fixture, &after) == foreign(&fixture, &before),
+        "publication changed a foreign note"
+    );
+    ensure!(
+        thread_state(discussion(&after, &finding_thread)?)
+            == thread_state(discussion(&before, &finding_thread)?),
+        "publication changed finding 1's thread"
+    );
+    ensure!(discussion(&after, &finding_thread)?["notes"][0]["resolved"] == true);
+    ensure!(
+        reviewer_notes(&fixture, &after).len() == reviewer_notes(&fixture, &before).len() + 1,
+        "the answer is the only new reviewer note"
+    );
+    answered_only(&fixture, &after, &summary_id, 3, &second)?;
+    ensure!(
+        discussion_of(&after, &summary_id)?["notes"]
+            .as_array()
+            .context("summary discussion notes")?
+            .iter()
+            .any(|note| note["id"] == summary_reply),
+        "the reply to the summary stays"
+    );
+    fixture.author.put(
+        &format!("{threads}/{}", finding_thread.as_str().unwrap()),
+        &json!({"resolved": false}),
+    )?;
+
+    // A round that answers in finding 1's thread compares it: a later reply
+    // there blocks before any write.
+    let targeted_reply = answering(
+        &mut fixture,
+        "freshness-targeted-reply",
+        &worktree,
+        &mr,
+        &untouched,
+        &[(1, &late)],
+    )?;
+    let blocking = reply(
+        &fixture.author,
+        &path,
+        &finding_thread,
+        "And a signed zero?",
+    )?;
+    refused(
+        &mut fixture,
+        "freshness-targeted-reply",
+        &targeted_reply,
+        &mr,
+        json!([{"kind": "note_added", "discussion": finding_thread, "note": blocking.to_string()}]),
+    )?;
+
+    // A resolution change on that thread blocks too.
+    let targeted_resolution = answering(
+        &mut fixture,
+        "freshness-targeted-resolution",
+        &worktree,
+        &mr,
+        &untouched,
+        &[(1, &blocking)],
+    )?;
+    fixture.author.put(
+        &format!("{threads}/{}", finding_thread.as_str().unwrap()),
         &json!({"resolved": true}),
     )?;
     refused(
         &mut fixture,
-        "freshness-owned-resolution",
-        &owned_resolution,
+        "freshness-targeted-resolution",
+        &targeted_resolution,
         &mr,
-        json!([{"kind": "resolution_changed", "discussion": audit_thread}]),
+        json!([{"kind": "resolution_changed", "discussion": finding_thread}]),
     )?;
     fixture.author.put(
-        &format!("{threads}/{}", audit_thread.as_str().unwrap()),
+        &format!("{threads}/{}", finding_thread.as_str().unwrap()),
         &json!({"resolved": false}),
     )?;
 
-    // A fresh run assesses the current threads and publishes.
+    // A fresh run assesses the current thread and publishes.
     let current = answering(
         &mut fixture,
         "freshness-current",
         &worktree,
         &mr,
-        &answered,
-        &[(1, &late), (2, &second)],
+        &untouched,
+        &[(1, &blocking)],
     )?;
     let before = fixture.observe("freshness-current-foreign", &mr)?;
     let (_, result) = publish(
@@ -474,15 +617,16 @@ pub fn conversation_freshness_scope(mut fixture: Fixture) -> Result<()> {
         "completed",
         CliOptions::default(),
     )?;
-    ensure!(result["round"] == 3);
+    ensure!(result["round"] == 4);
     let after = fixture.observe("freshness-current", &mr)?;
     ensure!(
         foreign(&fixture, &after) == foreign(&fixture, &before),
         "publication changed a foreign note"
     );
     ensure!(
-        reviewer_notes(&fixture, &after).len() == reviewer_notes(&fixture, &before).len() + 2,
-        "two answers are the only new reviewer notes"
+        reviewer_notes(&fixture, &after).len() == reviewer_notes(&fixture, &before).len() + 1,
+        "the answer is the only new reviewer note"
     );
+    answered_only(&fixture, &after, &summary_id, 4, &blocking)?;
     fixture.finish()
 }

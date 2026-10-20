@@ -186,10 +186,7 @@ fn next_action(
     let newer = retained["state"] == "newer";
     match reading.publication(manifest) {
         Some(RunPublication::BoundUnsent(_)) if newer => {
-            return format!(
-                "A newer rkc wrote this run's retained files, so this rkc cannot resume it. {}",
-                super::journal::UNSENT_GUIDANCE
-            );
+            return "No write of this run's publication binding could have reached the provider, and a newer rkc wrote this run's retained files, so this rkc cannot resume it. Resume it with that rkc version or a later one, or start a fresh run with rkc run start --new and publish it; that publication releases this binding, after which this run can be stopped.".into();
         }
         Some(RunPublication::BoundUnsent(_)) => {
             return super::journal::UNSENT_GUIDANCE.into();

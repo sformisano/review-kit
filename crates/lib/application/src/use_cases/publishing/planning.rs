@@ -61,6 +61,10 @@ pub enum PlanError {
     Discovery(#[source] DiscoveryError),
     #[error("reviewed revision is no longer current")]
     ChangedRevision,
+    #[error(
+        "the publication would write to an existing thread that the freshness check did not compare"
+    )]
+    UncomparedWrite,
     #[error("assessment reviewer differs from authenticated actor")]
     WrongReviewer,
     #[error("publication progress belongs to another subject or reviewer")]

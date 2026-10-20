@@ -338,8 +338,8 @@ account type only; it does not prove that a person wrote the note. The
 [GitLab adapter](../../lib/infrastructure/gitlab-adapter/README.md#note-author-accounts)
 describes the lookups.
 
-Account details never change publication rules. Inside the reviewer's own
-threads a bot's note blocks like anyone else's, and the
+Account details never change publication rules. Inside a thread that the
+publication writes to, a bot's note blocks like anyone else's, and the
 [freshness preflight](#publication-and-recovery) compares authors by `author`
 only, so a renamed account, a missing username or a changed bot status never
 blocks publication. System notes are not captured. The
@@ -675,21 +675,60 @@ in the document. It says that the round continues only with that exact profile,
 selected with `--render-profile PATH` or `render_profile` until the round
 finishes ([rendering profiles](../../../docs/render-profiles.md#recover-an-interrupted-attempt)).
 Before the first write could reach the provider, the current head and comparison
-must equal the run's revision (`source_changed`). The reviewer's own threads
-must also be unchanged since capture (`conversation_changed`). They are the
-discussion of the owned summary note and each owned finding thread, where
-publication updates, answers, resolves or reopens. Discovery identifies them in
-the run's retained history and in the current one, by API author and
-corroborated Review Kit markers; a marker copied into another author's note
-grants no ownership. Inside those threads, any added, removed, edited or moved
-note and any resolution change blocks, whoever made it. Order and capture time
-are ignored. The diagnostic's `changes` lists only these owned-thread changes.
-Notes, threads and resolutions owned by other people or bots, and title or
-description edits, do not block, and publication never writes to them. While
-the reviewer has no summary or finding thread on the merge request, only a
-source change blocks. Start a new run after either refusal. A deleted finding thread fails discovery first with
+must equal the run's revision (`source_changed`). The existing objects that the
+publication writes to must also be unchanged since capture
+(`conversation_changed`). They are the reviewer's summary note and each finding
+thread that receives a transition reply, an answer, a resolve or a reopen in
+this publication. A new finding thread is no target, because it does not exist
+yet. Inside a target thread, any added, removed, edited or moved note and any
+resolution change blocks, whoever made it. For the summary, an edit, a move or
+the removal of the note itself blocks; replies in its discussion do not. Order
+and capture time are ignored. The diagnostic's `changes` lists only changes to
+the targets. Replies to the summary, changes in the reviewer's finding threads
+without a planned effect, notes, threads and resolutions by other people or bots
+elsewhere, and title or description edits do not block, and publication does
+not write there; the next review assesses them. A first publication writes to no
+existing object, so only a source change blocks it. A plan that writes nothing,
+such as an exact repeat of the current round, has no targets and settles as
+`no_changes` without writes. Start a new run after either refusal. A deleted summary note or finding thread fails discovery first with
 [`managed_history_conflict`](#output-and-exit-status). Publication communicates
-the assessed snapshot, not later events.
+the assessed snapshot, not later events: its summary records only the round's
+own effects and the notes that its answers name.
+
+The freshness preflight runs in this order:
+
+1. Check the accepted assessment offline against the captured history, the
+   retained source and the run's own journal progress.
+2. Discover the merge request, and for a new run refuse another run's
+   unfinished publication.
+3. Compare the current revision with the captured one (`source_changed`).
+4. Plan the accepted assessment against the current discovery with the same
+   progress; this is the plan that publication executes. When that plan cannot
+   be built, publication writes nothing and the plan of step 1 is used instead,
+   so a change that broke the plan, such as a deleted answered note, is reported
+   as `conversation_changed`.
+5. Collect the targets of that plan, adding the target of a retained write that
+   recovery sends first. Discovery verifies the reviewer's summary note and
+   finding threads in the captured and in the current history by API author and
+   corroborated Review Kit markers; a marker copied into another author's note
+   grants no ownership.
+6. Capture the current conversation and compare it with the retained one at
+   those targets (`conversation_changed`).
+7. Load the journal and record `publication_attempted`, then hand the targets to
+   the publication engine. The engine discovers and plans again, and before it
+   records any intent it refuses a round that would write to an existing summary
+   note or finding thread outside them (`uncompared_write`, exit `3`). This
+   covers a change of the reviewer's history between the preflight and the
+   engine's discovery; nothing is written, and the next step is a new run.
+
+| Command and run state | Freshness | Targets |
+| --- | --- | --- |
+| `publish --effects ...` of a new run | Steps 1 to 7 | The plan against the current discovery |
+| `publish --effects ... --plan` of a new run or of a binding that sent nothing | Steps 1 to 6; planning writes nothing, so the engine receives no targets | As for the matching `publish` |
+| `publish` of a binding none of whose writes could have reached GitLab | Steps 1 to 7; refusals carry the [unsent-binding](#local-run-state-and-the-journal) `next` | The plan of the bound round with the journal's progress, and the retained prepared write that is resumed first |
+| `publish` or `--plan` after a possible dispatch | Skipped; the engine's per-effect checks apply | None; once a write of the binding may have reached GitLab, the rest of its round writes only what the round planned |
+| `publish --abandon` | None; abandonment only closes the bound round in the summary | None |
+| A settled run | None; the command reports `already_settled` | None |
 
 Publication holds the workspace lock, then the subject/reviewer journal lock
 (`publication_busy` when held). Its durable order is: read the journal; discover
@@ -749,8 +788,8 @@ While another run owns unfinished publication, other runs can draft, accept and
 finish locally, but their planning and publication fail with
 `publication_pending_owner` naming the owner in `owner_run_id`. This check reads
 the journal after discovery and before the freshness preflight, so it also
-applies when the owner's partial publication changed the reviewer's threads; its
-`next` says how to recover the owner. Recover the owner first:
+applies when the owner's partial publication changed this run's write targets;
+its `next` says how to recover the owner. Recover the owner first:
 
 ```sh
 rkc status
@@ -758,9 +797,9 @@ rkc run select <owner run ID>
 rkc publish --effects review
 ```
 
-A run captured before the owner's publication changed the reviewer's threads
-then fails `conversation_changed`, or `source_changed` after a new head; start a
-fresh run.
+A run captured before the owner's publication then fails `conversation_changed`
+when it would write to the summary note or a thread that the owner's publication
+changed, or `source_changed` after a new head; start a fresh run.
 
 When the owner has no unresolved write and the provider shows its bound round
 terminal, the next run's publication records that settlement and proceeds.
@@ -770,7 +809,7 @@ releases that binding and restores the earlier effect ceiling, so the new run is
 not limited by the owner's grant. That run's `--plan` reads the journal as the
 release would leave it, without changing the journal, and names the owner in
 `publication_owner_released`. This is the way forward when the owner's source
-or own threads changed after a crash:
+or one of its write targets changed after a crash:
 
 ```sh
 rkc run start --new
@@ -914,7 +953,7 @@ and verified effects; [result inspection](#result-inspection) shows how to read 
 | --- | --- | --- |
 | `0` | Success; inspect publication status | `already_settled` |
 | `2` | Invalid arguments, configuration, environment, input or rendering | `arguments`, `configuration`, `discovery`, `not_in_git_worktree`, `runtime_tracked`, `runtime_redirected`, `runtime_unrecognized`, `no_selected_run`, `invalid_run_id`, `run_missing`, `run_file_missing`, `run_identity_mismatch`, `identity_mismatch`, `repository_mismatch`, `hash_mismatch`, `accepted_snapshot_missing`, `invalid_accepted_snapshot`, `invalid_run_document`, `newer_run_document`, `assessment_not_accepted`, `dirty_draft`, `blank_reason`, `render_profile_changed` |
-| `3` | Reviewed source or the reviewer's own threads changed before dispatch, or the revision changed during publication or recovery | `source_changed`, `conversation_changed`, `changed_revision`, `discovery`, `gitlab` |
+| `3` | Reviewed source or a write target changed before dispatch, the engine's round left the compared targets, or the revision changed during publication or recovery | `source_changed`, `conversation_changed`, `uncompared_write`, `changed_revision`, `discovery`, `gitlab` |
 | `4` | Reviewer or authority mismatch | `wrong_reviewer`, `discovery` |
 | `5` | Busy locks, run, journal or managed history state conflicts | `workspace_busy`, `publication_busy`, `open_run_exists`, `run_terminal`, `publication_pending_owner`, `binding_mismatch`, `no_unfinished_publication`, `journal_unavailable`, `journal_missing`, `run_journal_exists`, `settlement_conflict`, `managed_history_conflict`, `discovery`, `gitlab` |
 | `6` | Unknown write, unresolved intent or readback mismatch | publication `stop` diagnostics |
@@ -1089,7 +1128,7 @@ jq '{stop: .run.outcome.result.stop, finalization_stop: .run.outcome.result.fina
 | `.run.outcome.diagnostics` | Why planning or publication was refused before execution |
 | `.run.evidence_failure` | The final execution record was not saved; the reported result is still the actual outcome |
 | `storage_failures` | A file not saved after the result: `progress_storage` for the journal, `result_storage` for `review-publication-result.json` |
-| `diagnostics` | A top-level diagnostic of a complete document: `changed_revision` with `next` when a new head or base stopped publication, or `publication_pending_owner` with `owner_run_id` |
+| `diagnostics` | A top-level diagnostic of a complete document: `changed_revision` with `next` when a new head or base stopped publication, `uncompared_write` with `next` when the engine refused a round outside the compared targets, or `publication_pending_owner` with `owner_run_id` |
 
 A readback failure is a `stop` with `provider_unavailable` after a dispatched
 write. That write is in `attempted` but not in `verified`, and

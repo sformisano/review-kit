@@ -292,7 +292,7 @@ pub fn unfinished_guidance(round: u64) -> String {
 }
 
 /// Guidance for a run that owns a binding none of whose writes could have reached the provider.
-pub const UNSENT_GUIDANCE: &str = "No write of this run's publication binding could have reached the provider. If the reviewed source or the reviewer's own threads changed, start a fresh run with rkc run start --new and publish it; that publication releases this binding, after which this run can be stopped.";
+pub const UNSENT_GUIDANCE: &str = "No write of this run's publication binding could have reached the provider. If the reviewed source or a thread that this publication writes to changed, start a fresh run with rkc run start --new and publish it; that publication releases this binding, after which this run can be stopped.";
 
 /// The run keeps its binding although nothing was sent; only another run's publication releases it.
 #[review_kit_observation::operations]

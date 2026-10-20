@@ -191,6 +191,7 @@ pub fn run_bound(
                     .map(|request| BoundInvocation {
                         request,
                         clock: &mut *clock,
+                        scope: request.write_scope.as_ref(),
                     })
                     .as_mut(),
             )

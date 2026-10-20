@@ -82,12 +82,8 @@ pub fn execute(
         }
     })?;
     let mut events = evidence(&session.lock, &session.run, &session.store, &renderer)?;
-    check_offline(
-        &session.run,
-        &chain,
-        &mut renderer,
-        &own_progress(&session.reading, &role),
-    )?;
+    let offline = own_progress(&session.reading, &role);
+    let preview = check_offline(&session.run, &chain, &mut renderer, &offline)?;
     let gitlab = connect(&session.config, &session.run)?;
     let unsent = matches!(role, Role::Recovery { unsent: true, .. });
     let unsent_hint = |error: CliError| {
@@ -101,9 +97,21 @@ pub fn execute(
     if let Role::New = role {
         admit_owner(&session.reading, &session.run, &snapshot)?;
     }
-    if freshness == Freshness::Required {
-        require_fresh(&gitlab, &session.run, &snapshot).map_err(&unsent_hint)?;
-    }
+    let write_scope = match freshness {
+        Freshness::Required => Some(
+            require_fresh(
+                &gitlab,
+                &session.run,
+                &snapshot,
+                &chain,
+                &mut renderer,
+                &offline,
+                &preview,
+            )
+            .map_err(&unsent_hint)?,
+        ),
+        Freshness::Skipped => None,
+    };
     let history = ManagedHistory::from(&snapshot);
     journal::require_empty_start(&session.reading, &session.store, &history)?;
     let opened = session
@@ -135,7 +143,7 @@ pub fn execute(
             .map_err(|error| CliError::storage("record publication attempt", error))?;
     }
     fault_point!("publish.after_attempt_flag");
-    let binding = binding_request(&session.run, &chain);
+    let binding = binding_request(&session.run, &chain, write_scope);
     let mut reader = gitlab.clone();
     let mut source = gitlab.clone();
     let mut host = gitlab.publication_host(session.config.authority());
@@ -224,6 +232,10 @@ pub fn execute(
         && finished.status == "unfinished"
     {
         value["next"] = json!(guidance::stranded_guidance(stranded, None));
+    } else if let Err(PlanError::UncomparedWrite) = &report.outcome {
+        let diagnostic = guidance::uncompared_write();
+        value["next"] = diagnostic["next"].clone();
+        value["diagnostics"] = json!([diagnostic]);
     } else if finished.status == "unfinished" && run_exit(&report) == 3 {
         let diagnostic = guidance::changed_revision(round);
         value["next"] = diagnostic["next"].clone();

@@ -160,6 +160,7 @@ pub(crate) fn plan_error(value: &PlanError) -> ErrorInfo {
         PlanError::InvalidTransition(_) => "invalid_transition",
         PlanError::DuplicateTransition(_) => "duplicate_transition",
         PlanError::ChangedRevision => "changed_revision",
+        PlanError::UncomparedWrite => "uncompared_write",
         PlanError::WrongReviewer => "wrong_reviewer",
         PlanError::ProgressBinding => "progress_binding",
         PlanError::MissingCarriedFinding(_) => "missing_carried_finding",

@@ -210,16 +210,16 @@ fn an_unsent_owner_resumes_its_publication_past_foreign_comments() {
     );
 }
 
-/// A follow-up owner whose own finding thread gained a reply after its crash
-/// cannot publish its assessed snapshot; a fresh run releases its binding.
+/// A follow-up owner whose summary note someone edited after its crash cannot
+/// publish its assessed snapshot; a fresh run releases its binding.
 #[test]
-fn an_unsent_follow_up_owner_whose_own_thread_changed_yields_to_a_fresh_run() {
+fn an_unsent_follow_up_owner_whose_summary_changed_yields_to_a_fresh_run() {
     for unsent in [Unsent::Prepared, Unsent::Rejected] {
-        follow_up_owner_yields_after_its_own_thread_changed(unsent);
+        follow_up_owner_yields_after_its_summary_changed(unsent);
     }
 }
 
-fn follow_up_owner_yields_after_its_own_thread_changed(unsent: Unsent) {
+fn follow_up_owner_yields_after_its_summary_changed(unsent: Unsent) {
     let harness = Harness::new();
     harness.accepted_with_finding();
     harness.ok(&["publish", "--effects", "review"]);
@@ -253,12 +253,16 @@ fn follow_up_owner_yields_after_its_own_thread_changed(unsent: Unsent) {
         Unsent::Prepared => assert_eq!(pending["unresolved"]["phase"], "prepared"),
         Unsent::Rejected => assert_eq!(pending["unresolved"], Value::Null),
     }
-    let question = harness
-        .http
-        .state
-        .lock()
-        .unwrap()
-        .question("discussion-1", "Is the cause still lost?");
+    let summary = {
+        let mut state = harness.http.state.lock().unwrap();
+        let summary = &mut state.notes[0];
+        let body = format!(
+            "Maintainer note: see the description.\n\n{}",
+            summary["body"].as_str().unwrap()
+        );
+        summary["body"] = json!(body);
+        summary["id"].clone()
+    };
     let writes = harness.writes();
     let failed = harness.fails(
         &["publish", "--effects", "review"],
@@ -267,7 +271,7 @@ fn follow_up_owner_yields_after_its_own_thread_changed(unsent: Unsent) {
     );
     assert_eq!(
         failed["diagnostics"][0]["changes"],
-        json!([{"kind": "note_added", "discussion": "discussion-1", "note": question.to_string()}]),
+        json!([{"kind": "note_body_changed", "note": summary.to_string()}]),
         "{failed:#}"
     );
     assert!(
@@ -393,5 +397,41 @@ fn an_unsent_owner_with_a_newer_conversation_is_pointed_at_a_fresh_run() {
     assert_eq!(status["retained_files"]["state"], "newer", "{status:#}");
     let next = status["next"].as_str().unwrap();
     assert!(next.contains("cannot resume it"), "{next}");
+    assert!(
+        next.contains("Resume it with that rkc version or a later one"),
+        "{next}"
+    );
     assert!(next.contains("rkc run start --new"), "{next}");
+}
+
+/// An owner that sent nothing resumes its retained summary write past a reply
+/// in its own finding thread that this publication does not write to.
+#[test]
+fn an_unsent_follow_up_owner_resumes_past_a_reply_in_an_untouched_thread() {
+    let harness = Harness::new();
+    harness.accepted_with_finding();
+    harness.ok(&["publish", "--effects", "review"]);
+    let owner = harness.follow_up_in(&harness.repo, false);
+    crash(
+        &harness,
+        "publish.after_intent:1",
+        &["publish", "--effects", "review"],
+    );
+    assert_eq!(harness.journal()["unresolved"]["phase"], "prepared");
+    harness
+        .http
+        .state
+        .lock()
+        .unwrap()
+        .question("discussion-1", "Is the cause still lost?");
+    let untouched = harness.http.state.lock().unwrap().discussions[0].clone();
+    let recovered = harness.ok(&["publish", "--effects", "review"]);
+    assert_eq!(recovered["status"], "settled", "{recovered:#}");
+    assert_eq!(recovered["recovery"], true);
+    assert_eq!(harness.manifest(&owner)["completion"], "published");
+    assert_eq!(
+        harness.http.state.lock().unwrap().discussions[0],
+        untouched,
+        "the finding thread is untouched"
+    );
 }

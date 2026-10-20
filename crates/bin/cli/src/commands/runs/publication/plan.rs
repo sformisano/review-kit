@@ -72,7 +72,7 @@ pub fn execute(
     if !matches!(role, Role::Recovery { .. }) {
         offline.unresolved = None;
     }
-    check_offline(&session.run, &chain, &mut renderer, &offline)?;
+    let preview = check_offline(&session.run, &chain, &mut renderer, &offline)?;
     let gitlab = connect(&session.config, &session.run)?;
     let snapshot = discover_current(&gitlab, &session.run)?;
     let owner_settlement = match role {
@@ -81,7 +81,15 @@ pub fn execute(
         Role::Recovery { .. } | Role::Settled(_) => None,
     };
     if freshness == Freshness::Required {
-        require_fresh(&gitlab, &session.run, &snapshot)?;
+        require_fresh(
+            &gitlab,
+            &session.run,
+            &snapshot,
+            &chain,
+            &mut renderer,
+            &offline,
+            &preview,
+        )?;
     }
     journal::require_empty_start(
         &session.reading,

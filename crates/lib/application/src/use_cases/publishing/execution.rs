@@ -5,6 +5,7 @@ use super::action_write::action_write;
 use super::binding::{BoundInvocation, RunBinding};
 use super::planning::{PlanError, PublishRequest, build_plan, nonempty};
 use super::progress::{PublicationProgress, UnresolvedWrite, WritePhase};
+use crate::conversation::WriteTargets;
 use crate::use_cases::discovery::{DiscoveryError, discover_managed, validate_snapshot};
 use crate::use_cases::publication_run::{ExecutionEvent, ExecutionEvidence, NoEvidence};
 use crate::{
@@ -208,7 +209,13 @@ pub(crate) fn publish_recorded_managed(
             }
             if super::recovery::eligible(&pending, progress, request, &snapshot, &initial_authority)
             {
-                build_plan(request, &snapshot, source, renderer)?;
+                let plan = build_plan(request, &snapshot, source, renderer)?;
+                if let Some(scope) = binding.as_deref().and_then(|bound| bound.scope) {
+                    let plan = super::history::with_progress(
+                        plan, request, &snapshot, renderer, progress,
+                    )?;
+                    require_scope(scope, &plan, &snapshot, Some(&pending.write))?;
+                }
                 let mut report = super::recovery::pending_report(
                     &pending,
                     &snapshot,
@@ -240,6 +247,11 @@ pub(crate) fn publish_recorded_managed(
                 ) {
                     Ok(()) => {
                         drop(execution);
+                        // The scope covered the whole resumed round before its
+                        // first write; the rest of the round writes a subset.
+                        if let Some(bound) = binding.as_deref_mut() {
+                            bound.scope = None;
+                        }
                         let resumed = publish_recorded_managed(
                             request, host, source, renderer, progress, evidence, binding,
                         );
@@ -301,6 +313,9 @@ pub(crate) fn publish_recorded_managed(
     }
     let plan = build_plan(request, &snapshot, source, renderer)?;
     let plan = super::history::with_progress(plan, request, &snapshot, renderer, progress)?;
+    if let Some(scope) = binding.as_deref().and_then(|bound| bound.scope) {
+        require_scope(scope, &plan, &snapshot, None)?;
+    }
     let install =
         super::binding::installation(&admission, binding.as_deref(), progress, plan.round.number)?;
     let authority = request.effects.intersection(&initial_authority);
@@ -446,6 +461,22 @@ pub(crate) fn publish_recorded_managed(
         report.status = status_for(stop, report.attempted.is_empty());
     }
     Ok(report)
+}
+
+/// Refuse an invocation that would write to an existing object outside `scope`.
+#[review_kit_observation::operations]
+#[helper]
+fn require_scope(
+    scope: &WriteTargets,
+    plan: &Plan,
+    snapshot: &Snapshot,
+    pending: Option<&Write>,
+) -> Result<(), PlanError> {
+    if scope.covers(&WriteTargets::of(plan, &[snapshot], pending)) {
+        Ok(())
+    } else {
+        Err(PlanError::UncomparedWrite)
+    }
 }
 
 #[review_kit_observation::operations]

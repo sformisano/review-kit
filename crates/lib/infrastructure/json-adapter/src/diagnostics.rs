@@ -153,6 +153,7 @@ impl Diagnostic {
                     PlanError::Evidence(_) => ("evidence_unavailable", None),
                     PlanError::Discovery(_) => ("discovery_failed", None),
                     PlanError::ChangedRevision => ("changed_revision", None),
+                    PlanError::UncomparedWrite => ("uncompared_write", None),
                     PlanError::WrongReviewer => ("wrong_reviewer", None),
                     PlanError::ProgressBinding => ("progress_binding", None),
                     PlanError::MissingTransition(id) => ("missing_transition", Some(*id)),

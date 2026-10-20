@@ -1,14 +1,15 @@
 //! The conversation preflight before a run's first possible dispatch: only
-//! changes inside the reviewer's own summary and finding threads stop
-//! publication. Notes, threads and resolutions owned by other people or bots,
-//! and title or description edits, never block, and publication leaves them
-//! untouched.
+//! changes to what the publication writes to stop it, namely the reviewer's
+//! summary note and the finding threads that receive a reply, a resolve or a
+//! reopen. Replies in the summary's discussion, the reviewer's other threads,
+//! activity by other people or bots elsewhere, and title or description edits
+//! never block, and publication leaves them untouched.
 
 use serde_json::{Value, json};
 
 use super::{
     harness::{ERROR_POLICY, Harness, PROOF_POLICY, read_json, write_json},
-    server::MR_PATH,
+    server::{Fault, MR_PATH},
 };
 
 /// The fixture's authenticated reviewer.
@@ -330,7 +331,7 @@ fn foreign_and_bot_activity_after_capture_does_not_block_a_first_publication() {
 /// A follow-up writes exactly its plan after foreign activity, a foreign note
 /// edit and a system note inside its own finding thread.
 #[test]
-fn foreign_activity_outside_owned_threads_does_not_block_a_follow_up() {
+fn foreign_activity_outside_write_targets_does_not_block_a_follow_up() {
     let harness = Harness::new();
     let bot_note = general_note(&harness, "early-bot", BOT, "Pipeline report: passed.");
     let follow_up = answering_follow_up(&harness);
@@ -394,7 +395,8 @@ fn foreign_activity_outside_owned_threads_does_not_block_a_follow_up() {
     );
 }
 
-/// A change inside the reviewer's own threads after the follow-up's capture.
+/// A change to the follow-up's write targets after its capture: the
+/// answered finding thread or the summary note.
 #[derive(Clone, Copy, Debug)]
 enum OwnedChange {
     /// The author replies in the finding thread.
@@ -464,7 +466,7 @@ fn apply(harness: &Harness, change: OwnedChange, follow_up: &FollowUp) -> Value 
 }
 
 #[test]
-fn changes_inside_owned_threads_still_block_before_the_first_dispatch() {
+fn changes_to_write_targets_block_before_the_first_dispatch() {
     for change in [
         OwnedChange::Reply,
         OwnedChange::Resolution,
@@ -486,7 +488,7 @@ fn changes_inside_owned_threads_still_block_before_the_first_dispatch() {
             assert_eq!(
                 refused["diagnostics"][0]["changes"],
                 json!([expected]),
-                "{change:?} {args:?}: only the owned-thread change is listed"
+                "{change:?} {args:?}: only the write-target change is listed"
             );
             assert!(
                 refused["diagnostics"][0]["message"]
@@ -534,4 +536,334 @@ fn a_deleted_owned_thread_stops_publication_as_a_history_conflict() {
         harness.manifest(&follow_up.run_id)["publication_attempted"],
         false
     );
+}
+
+/// The discussion with `id`, as the fixture lists it.
+fn thread_json(harness: &Harness, id: &str) -> Value {
+    harness
+        .http
+        .state
+        .lock()
+        .unwrap()
+        .listed_discussions()
+        .into_iter()
+        .find(|thread| thread["id"] == id)
+        .unwrap()
+}
+
+/// Publish round 1 with finding 1, then capture and accept a follow-up that
+/// keeps it open and only updates the summary.
+///
+/// Returns the follow-up run ID and finding 1's thread.
+fn summary_only_follow_up(harness: &Harness) -> (String, String) {
+    harness.accepted_with_finding();
+    let published = harness.ok(&["publish", "--effects", "review"]);
+    assert_eq!(published["status"], "settled", "{published:#}");
+    let [thread] = owned_threads(harness).try_into().unwrap();
+    let run_id = harness.follow_up_in(&harness.repo, false);
+    (run_id, thread)
+}
+
+/// Publish a follow-up that writes only the summary, and require exactly its
+/// two summary updates.
+fn publishes_summary_only(harness: &Harness, run_id: &str) {
+    let before = writes(harness).len();
+    let planned = harness.ok(&["publish", "--effects", "review", "--plan"]);
+    assert_eq!(planned["status"], "planned", "{planned:#}");
+    assert_eq!(planned["run"]["outcome"]["plan"]["actions"], json!([]));
+    let published = harness.ok(&["publish", "--effects", "review"]);
+    assert_eq!(published["status"], "settled", "{published:#}");
+    assert_eq!(harness.manifest(run_id)["completion"], "published");
+    let summary = format!("{MR_PATH}/notes/{}", summary_note(harness));
+    assert_eq!(
+        writes(harness)[before..],
+        [
+            ("PUT".to_owned(), summary.clone()),
+            ("PUT".to_owned(), summary)
+        ],
+        "the pending and the final summary"
+    );
+}
+
+/// Replies by a person and a bot and a resolution change in the reviewer's
+/// own finding thread do not block a publication that writes nothing there.
+#[test]
+fn changes_in_an_own_thread_without_a_planned_effect_do_not_block() {
+    let harness = Harness::new();
+    let (run_id, thread) = summary_only_follow_up(&harness);
+    reply(&harness, &thread, AUTHOR, "I disagree with this finding.");
+    reply(
+        &harness,
+        &thread,
+        BOT,
+        "Automated note: the linked issue moved.",
+    );
+    resolve(&harness, &thread, true);
+    let untouched = thread_json(&harness, &thread);
+    publishes_summary_only(&harness, &run_id);
+    assert_eq!(
+        thread_json(&harness, &thread),
+        untouched,
+        "the thread is untouched"
+    );
+}
+
+/// A reply in the summary note's discussion does not block; the summary
+/// update proceeds and the reply stays.
+#[test]
+fn a_reply_to_the_summary_does_not_block() {
+    let harness = Harness::new();
+    let (run_id, _) = summary_only_follow_up(&harness);
+    let summary = summary_note(&harness);
+    let reply = {
+        let mut state = harness.http.state.lock().unwrap();
+        let mut note = state.note("Thanks, I will look at the summary.", AUTHOR);
+        note["type"] = json!("DiscussionNote");
+        state.note_replies.insert(summary, vec![note.clone()]);
+        note
+    };
+    publishes_summary_only(&harness, &run_id);
+    let listed = thread_json(&harness, &format!("note-{summary}"));
+    assert_eq!(listed["notes"][1], reply, "the reply is untouched");
+    assert_ne!(
+        listed["notes"][0]["body"],
+        json!(null),
+        "the summary note was updated in place"
+    );
+}
+
+/// The follow-up's planned effect on finding 1: a transition and resolution
+/// change, or a reopening after an earlier fix.
+#[derive(Clone, Copy, Debug)]
+enum PlannedEffect {
+    /// Open to fixed: a transition reply and a resolve.
+    Fixed,
+    /// Fixed to open after a published fix: a transition reply and a reopen.
+    Recurrence,
+}
+
+/// Capture and accept a follow-up that transitions finding 1 `from` → `to`.
+fn transition_follow_up(harness: &Harness, from: &str, to: &str) -> String {
+    let run_id = harness.start();
+    harness.declare_policies(&run_id, &[ERROR_POLICY, PROOF_POLICY]);
+    let path = harness.file(&run_id, "review-assessment.draft.json");
+    let mut draft = read_json(&path);
+    super::harness::ready(&mut draft);
+    let slot = &mut draft["findings"][0]["reassessment"];
+    slot["status"] = json!(to);
+    slot["evidence"] = json!(format!("The current source establishes the {to} state."));
+    draft["transitions"] = json!([{"finding": 1, "from": from, "to": to,
+        "body": format!("The committed change makes this finding {to}.")}]);
+    if to == "open" {
+        draft["decision"] = json!("changes_required");
+        for policy in draft["policies"].as_array_mut().unwrap() {
+            if policy["policy_id"] == ERROR_POLICY {
+                policy["outcome"] = json!({"kind": "violated", "evidence": "The failure path discards the cause again."});
+            }
+        }
+    }
+    write_json(&path, &draft);
+    harness.ok(&["accept"]);
+    run_id
+}
+
+/// A thread that receives a transition reply and a resolution change in this
+/// publication is compared: a later reply there blocks before any write.
+#[test]
+fn a_thread_with_a_planned_transition_and_resolution_change_is_compared() {
+    for effect in [PlannedEffect::Fixed, PlannedEffect::Recurrence] {
+        let harness = Harness::new();
+        harness.accepted_with_finding();
+        harness.ok(&["publish", "--effects", "review"]);
+        let [thread] = owned_threads(&harness).try_into().unwrap();
+        if let PlannedEffect::Recurrence = effect {
+            transition_follow_up(&harness, "open", "fixed");
+            let fixed = harness.ok(&["publish", "--effects", "review"]);
+            assert_eq!(fixed["status"], "settled", "{fixed:#}");
+            assert_eq!(thread_json(&harness, &thread)["notes"][0]["resolved"], true);
+        }
+        let run_id = match effect {
+            PlannedEffect::Fixed => transition_follow_up(&harness, "open", "fixed"),
+            PlannedEffect::Recurrence => transition_follow_up(&harness, "fixed", "open"),
+        };
+        let planned = harness.ok(&["publish", "--effects", "review", "--plan"]);
+        let kinds: Vec<_> = planned["run"]["outcome"]["plan"]["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|action| action["kind"].clone())
+            .collect();
+        assert_eq!(kinds, [json!("reply"), json!("set_resolved")], "{effect:?}");
+        let note = reply(&harness, &thread, BOT, "Automated note: please recheck.");
+        let before = writes(&harness);
+        for args in [
+            vec!["publish", "--effects", "review", "--plan"],
+            vec!["publish", "--effects", "review"],
+        ] {
+            let refused = harness.fails(&args, 3, "conversation_changed");
+            assert_eq!(
+                refused["diagnostics"][0]["changes"],
+                json!([{"kind": "note_added", "discussion": thread, "note": note.to_string()}]),
+                "{effect:?} {args:?}"
+            );
+        }
+        assert_eq!(writes(&harness), before, "{effect:?}: nothing is written");
+        assert_eq!(harness.manifest(&run_id)["publication_attempted"], false);
+    }
+}
+
+/// When someone deletes the reviewer's summary note after capture, discovery
+/// stops publication with a managed-history conflict before any write.
+#[test]
+fn a_deleted_summary_note_stops_publication_as_a_history_conflict() {
+    let harness = Harness::new();
+    let (run_id, _) = summary_only_follow_up(&harness);
+    harness.http.state.lock().unwrap().notes.clear();
+    let before = writes(&harness);
+    for args in [
+        vec!["publish", "--effects", "review", "--plan"],
+        vec!["publish", "--effects", "review"],
+    ] {
+        harness.fails(&args, 5, "managed_history_conflict");
+    }
+    assert_eq!(writes(&harness), before, "nothing is written");
+    assert_eq!(harness.manifest(&run_id)["publication_attempted"], false);
+}
+
+/// A follow-up that writes only the summary still compares the summary note:
+/// a maintainer's edit to it blocks before any write.
+#[test]
+fn an_edited_summary_note_blocks_a_summary_only_follow_up() {
+    let harness = Harness::new();
+    let (run_id, thread) = summary_only_follow_up(&harness);
+    let follow_up = FollowUp {
+        run_id,
+        thread,
+        question: 0,
+    };
+    let expected = apply(&harness, OwnedChange::EditedSummary, &follow_up);
+    let before = writes(&harness);
+    for args in [
+        vec!["publish", "--effects", "review", "--plan"],
+        vec!["publish", "--effects", "review"],
+    ] {
+        let refused = harness.fails(&args, 3, "conversation_changed");
+        assert_eq!(refused["diagnostics"][0]["changes"], json!([expected]));
+    }
+    assert_eq!(writes(&harness), before, "nothing is written");
+    assert_eq!(
+        harness.manifest(&follow_up.run_id)["publication_attempted"],
+        false
+    );
+}
+
+/// A first publication writes to no existing thread, so after foreign
+/// activity only a changed source stops it.
+#[test]
+fn a_first_publication_is_stopped_only_by_a_changed_source() {
+    let harness = Harness::new();
+    let run_id = harness.accepted_with_finding();
+    foreign_activity(&harness, "late");
+    harness.push_commit();
+    for args in [
+        vec!["publish", "--effects", "review", "--plan"],
+        vec!["publish", "--effects", "review"],
+    ] {
+        harness.fails(&args, 3, "source_changed");
+    }
+    assert_eq!(writes(&harness), []);
+    assert_eq!(harness.manifest(&run_id)["publication_attempted"], false);
+}
+
+/// The targets come from the plan against the current history, which is what
+/// publication executes. A run captured as an exact repeat of round 1 plans
+/// no write against its capture; after another run publishes round 2, its
+/// publication would write the summary, so the summary's change blocks it.
+#[test]
+fn targets_follow_the_plan_against_the_current_history() {
+    let harness = Harness::new();
+    harness.accepted_with_finding();
+    harness.ok(&["publish", "--effects", "review"]);
+    let repeat = harness.start();
+    harness.declare_policies(&repeat, &[ERROR_POLICY, PROOF_POLICY]);
+    let path = harness.file(&repeat, "review-assessment.draft.json");
+    let mut draft = read_json(&path);
+    super::harness::ready(&mut draft);
+    draft["decision"] = json!("changes_required");
+    for policy in draft["policies"].as_array_mut().unwrap() {
+        if policy["policy_id"] == ERROR_POLICY {
+            policy["outcome"] = json!({"kind":"violated","evidence":"The failure path discards the actionable error."});
+        }
+    }
+    write_json(&path, &draft);
+    assert_eq!(harness.ok(&["accept"])["plan"]["unchanged"], true);
+
+    let newer = harness.follow_up_in(&harness.repo, true);
+    let published = harness.ok(&["publish", "--effects", "review"]);
+    assert_eq!(published["status"], "settled", "{published:#}");
+    assert_eq!(harness.manifest(&newer)["completion"], "published");
+
+    harness.ok(&["run", "select", &repeat]);
+    let summary = summary_note(&harness);
+    let before = writes(&harness);
+    for args in [
+        vec!["publish", "--effects", "review", "--plan"],
+        vec!["publish", "--effects", "review"],
+    ] {
+        let refused = harness.fails(&args, 3, "conversation_changed");
+        assert_eq!(
+            refused["diagnostics"][0]["changes"],
+            json!([{"kind": "note_body_changed", "note": summary.to_string()}]),
+            "{args:?}"
+        );
+    }
+    assert_eq!(writes(&harness), before, "nothing is written");
+    assert_eq!(harness.manifest(&repeat)["publication_attempted"], false);
+}
+
+/// The publication engine plans again from its own discovery and refuses a
+/// round that would write outside the compared targets before recording any
+/// intent. Here the summary note moves to another ID after the preflight
+/// captured the conversation and before the engine discovers the history.
+#[test]
+fn the_engine_refuses_a_write_outside_the_compared_targets() {
+    let harness = Harness::new();
+    let (run_id, _) = summary_only_follow_up(&harness);
+    let summary = summary_note(&harness);
+    let moved = summary + 1000;
+    harness
+        .http
+        .state
+        .lock()
+        .unwrap()
+        .faults
+        .push(Fault::change_after_read(
+            &format!("{MR_PATH}/discussions"),
+            1,
+            move |state| state.notes[0]["id"] = json!(moved),
+        ));
+    let journal = harness.journal();
+    let before = writes(&harness);
+    let refused = harness.fails(&["publish", "--effects", "review"], 3, "uncompared_write");
+    let next = refused["next"].as_str().unwrap();
+    assert!(next.contains("rkc run start --new"), "{next}");
+    assert_eq!(refused["diagnostics"][0]["next"], refused["next"]);
+    assert_eq!(
+        refused["run"]["outcome"]["diagnostics"][0]["code"], "uncompared_write",
+        "{refused:#}"
+    );
+    assert_eq!(writes(&harness), before, "nothing is written");
+    assert_eq!(
+        harness.journal()["coverage_binding"],
+        journal["coverage_binding"]
+    );
+    assert_eq!(harness.journal()["unresolved"], json!(null));
+    assert_eq!(harness.manifest(&run_id)["completion"], json!(null));
+
+    // A fresh run captures the moved summary and publishes.
+    let fresh = harness.follow_up_in(&harness.repo, true);
+    let published = harness.ok(&["publish", "--effects", "review"]);
+    assert_eq!(published["status"], "settled", "{published:#}");
+    assert_eq!(harness.manifest(&fresh)["completion"], "published");
+    assert_eq!(summary_note(&harness), moved);
 }

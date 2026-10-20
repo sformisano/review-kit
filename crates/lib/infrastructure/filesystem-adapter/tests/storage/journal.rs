@@ -155,6 +155,7 @@ fn binding_request(run: u8) -> BindingRequest {
             diff: content('3'),
             conversation: content('4'),
         },
+        write_scope: None,
     }
 }
 

@@ -31,6 +31,9 @@ pub struct State {
     pub modes: BTreeMap<String, String>,
     /// User IDs that `GET /users/:id` reports as bots; every other user is not a bot.
     pub bot_users: BTreeSet<u64>,
+    /// Replies to merge-request notes, such as the review summary, by note ID.
+    /// A note with replies is listed as a thread instead of an individual note.
+    pub note_replies: BTreeMap<u64, Vec<Value>>,
     next_note: u64,
 }
 
@@ -73,6 +76,7 @@ impl State {
             revision_files: BTreeMap::new(),
             modes: BTreeMap::new(),
             bot_users: BTreeSet::new(),
+            note_replies: BTreeMap::new(),
             next_note: 100,
         }
     }
@@ -138,7 +142,18 @@ impl State {
             .notes
             .iter()
             .map(|note| {
-                json!({"id": format!("note-{}", note["id"]), "individual_note": true, "notes": [note]})
+                let id = format!("note-{}", note["id"]);
+                match note["id"]
+                    .as_u64()
+                    .and_then(|id| self.note_replies.get(&id))
+                {
+                    Some(replies) => {
+                        let mut notes = vec![note.clone()];
+                        notes.extend(replies.iter().cloned());
+                        json!({"id": id, "individual_note": false, "notes": notes})
+                    }
+                    None => json!({"id": id, "individual_note": true, "notes": [note]}),
+                }
             })
             .peekable();
         let mut listed = Vec::new();
@@ -212,7 +227,8 @@ impl State {
             Some(TOKEN)
         );
         if let Some(index) = self.faults.iter().position(|fault| fault.matches(&request)) {
-            if let Fault::Respond { skip_matches, .. } = &mut self.faults[index]
+            if let Fault::Respond { skip_matches, .. } | Fault::ChangeAfterRead { skip_matches, .. } =
+                &mut self.faults[index]
                 && *skip_matches > 0
             {
                 *skip_matches -= 1;
@@ -244,6 +260,11 @@ impl State {
                 Fault::PauseRead { ready, release, .. } => {
                     ready.send(()).unwrap();
                     release.recv_timeout(Duration::from_secs(20)).unwrap();
+                }
+                Fault::ChangeAfterRead { change, .. } => {
+                    let response = self.route(&request);
+                    change(self);
+                    return Some(response);
                 }
             }
         }
