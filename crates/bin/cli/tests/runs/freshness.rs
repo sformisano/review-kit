@@ -490,13 +490,7 @@ fn changes_to_write_targets_block_before_the_first_dispatch() {
                 json!([expected]),
                 "{change:?} {args:?}: only the write-target change is listed"
             );
-            assert!(
-                refused["diagnostics"][0]["message"]
-                    .as_str()
-                    .unwrap()
-                    .contains("rkc run start --new"),
-                "{refused:#}"
-            );
+            assert_stop_then_start(&refused);
         }
         assert_eq!(writes(&harness), before, "{change:?}: nothing is written");
         assert_eq!(
@@ -505,6 +499,19 @@ fn changes_to_write_targets_block_before_the_first_dispatch() {
         );
         assert_eq!(harness.journal(), journal, "{change:?}");
     }
+}
+
+/// A refused run without a binding is stopped before the new run starts, so
+/// `run start` needs no `--new`.
+fn assert_stop_then_start(refused: &Value) {
+    let message = refused["diagnostics"][0]["message"].as_str().unwrap();
+    assert!(
+        message.contains(
+            "stop this run with rkc run stop --reason TEXT, then start a new run with rkc run start"
+        ),
+        "{refused:#}"
+    );
+    assert!(!message.contains("--new"), "{refused:#}");
 }
 
 /// Discovery reports a deleted owned thread as a managed-history conflict
@@ -744,7 +751,7 @@ fn a_first_publication_is_stopped_only_by_a_changed_source() {
         vec!["publish", "--effects", "review", "--plan"],
         vec!["publish", "--effects", "review"],
     ] {
-        harness.fails(&args, 3, "source_changed");
+        assert_stop_then_start(&harness.fails(&args, 3, "source_changed"));
     }
     assert_eq!(writes(&harness), []);
     assert_eq!(harness.manifest(&run_id)["publication_attempted"], false);

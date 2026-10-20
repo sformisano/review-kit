@@ -19,6 +19,21 @@ enum Unsent {
     Rejected,
 }
 
+/// A freshness refusal of a run whose binding sent nothing keeps the run open:
+/// `run stop` refuses it until a new run's publication releases the binding.
+fn assert_replacement_route(refused: &Value) {
+    let message = refused["diagnostics"][0]["message"].as_str().unwrap();
+    assert!(
+        message.contains("start a new run with rkc run start --new and publish it"),
+        "{refused:#}"
+    );
+    assert!(
+        message.contains("releases this run's binding"),
+        "{refused:#}"
+    );
+    assert!(!message.contains("rkc run stop"), "{refused:#}");
+}
+
 /// An owner run bound by a two-effect publication of which nothing reached GitLab.
 fn unsent_owner(harness: &Harness, unsent: Unsent) -> String {
     let owner = harness.accepted_with_finding();
@@ -84,6 +99,11 @@ fn yields_to_a_fresh_run(unsent: Unsent) {
     assert_eq!(refused["diagnostics"][0]["provider_write_possible"], false);
     harness.push_commit();
     let writes = harness.writes();
+    assert_replacement_route(&harness.fails(
+        &["publish", "--effects", "review", "--plan"],
+        3,
+        "source_changed",
+    ));
     let failed = harness.fails(&["publish", "--effects", "review"], 3, "source_changed");
     assert!(
         failed["diagnostics"][0]["next"]
@@ -92,6 +112,7 @@ fn yields_to_a_fresh_run(unsent: Unsent) {
             .contains("rkc run start --new"),
         "{failed:#}"
     );
+    assert_replacement_route(&failed);
     assert_eq!(harness.writes(), writes, "{unsent:?}");
     let journal = harness.journal();
     assert_eq!(journal["coverage_binding"]["run_id"], owner);
@@ -267,6 +288,7 @@ fn follow_up_owner_yields_after_its_summary_changed(unsent: Unsent) {
             .contains("rkc run start --new"),
         "{failed:#}"
     );
+    assert_replacement_route(&failed);
     assert_eq!(harness.writes(), writes);
     let journal = harness.journal();
     assert_eq!(journal["coverage_binding"]["run_id"], owner);

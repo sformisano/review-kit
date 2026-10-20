@@ -198,8 +198,9 @@ account's permissions and token scope.
 Before the first write, the current head and comparison must still equal the
 run's capture. The summary note and the finding threads that the publication
 writes to must also be unchanged. A change fails with `source_changed` or
-`conversation_changed` (exit `3`); assess it in a new run with
-`rkc run start --new`. Activity elsewhere does not block, including replies to
+`conversation_changed` (exit `3`); stop that run with
+`rkc run stop --reason TEXT` and assess the change in a new run with
+`rkc run start`. Activity elsewhere does not block, including replies to
 the summary and changes in the reviewer's threads that the publication leaves
 alone. The [publication reference](crates/bin/cli/README.md#publication-and-recovery)
 defines the rule.

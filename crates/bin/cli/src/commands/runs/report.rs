@@ -226,12 +226,12 @@ fn next_action(
         return NEWER_GUIDANCE.into();
     }
     if !retained_intact {
-        return "Retained run files are missing, damaged or changed; restore the run's exact files, or stop it with rkc run stop --reason TEXT and start a new run with rkc run start --new.".into();
+        return "Retained run files are missing, damaged or changed; restore the run's exact files, or stop it with rkc run stop --reason TEXT and start a new run with rkc run start.".into();
     }
     match state {
         AssessmentState::Missing => return "Run rkc revise --reason TEXT --regenerate to prepare review-assessment.draft.json.".into(),
         AssessmentState::Draft => return "Complete review-assessment.draft.json, then run rkc accept.".into(),
-        AssessmentState::MissingSnapshot | AssessmentState::DamagedSnapshot => return "The accepted assessment is missing or damaged; restore its exact accepted bytes, or stop this run and start a new run with rkc run start --new.".into(),
+        AssessmentState::MissingSnapshot | AssessmentState::DamagedSnapshot => return "The accepted assessment is missing or damaged; restore its exact accepted bytes, or stop this run with rkc run stop --reason TEXT and start a new run with rkc run start.".into(),
         AssessmentState::Dirty => return "The draft differs from its accepted snapshot; run rkc revise --reason TEXT, complete the successor and run rkc accept, or restore accepted bytes.".into(),
         AssessmentState::Accepted => {}
     }
@@ -301,7 +301,7 @@ fn owner_recovery(
         return "Run rkc publish with the originally permitted effects to reconcile this run's unfinished publication, or rkc publish --abandon --reason TEXT after uncertain writes settle.".into();
     }
     format!(
-        "This run owns unfinished publication, and recovery publishes from its exact accepted snapshots, but {}. Restore the accepted files in the run directory from a copy of this run first, then {RECOVER}. Only if the accepted files cannot be restored, close the round with rkc publish --abandon --reason TEXT once no write is uncertain; abandonment ends the round publicly with that reason on the merge request, and a fresh run with rkc run start --new reviews again.",
+        "This run owns unfinished publication, and recovery publishes from its exact accepted snapshots, but {}. Restore the accepted files in the run directory from a copy of this run first, then {RECOVER}. Only if the accepted files cannot be restored, close the round with rkc publish --abandon --reason TEXT once no write is uncertain; abandonment ends the round publicly with that reason on the merge request, and a fresh run with rkc run start reviews again.",
         snapshots.unwrap_or_default()
     )
 }

@@ -703,8 +703,14 @@ assessed snapshot is still current where it writes:
 
 The diagnostic's `changes` lists only changes to write targets. Publication
 does not write where a change does not block; the next review assesses it.
-After either refusal, start a new run. A deleted summary note or finding thread
-fails discovery first with [`managed_history_conflict`](#output-and-exit-status).
+After either refusal, start a new run. Stop a run without a publication binding
+first with `rkc run stop --reason TEXT`, then run `rkc run start`. A run whose
+binding sent nothing cannot be stopped yet: start the new run with
+`rkc run start --new`, and stop the refused run after the new run's publication
+releases the binding ([unsent binding](#local-run-state-and-the-journal)).
+Each refusal's message names the route for the refused run. A deleted summary
+note or finding thread fails discovery first with
+[`managed_history_conflict`](#output-and-exit-status).
 
 When the reviewer has no summary, at capture or now, publication writes to no
 existing object, so only a source change blocks it. A plan that writes nothing, such as

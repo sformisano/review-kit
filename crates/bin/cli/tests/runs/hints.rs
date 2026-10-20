@@ -46,6 +46,10 @@ fn assert_restore_first(next: &str, subject: &str) {
     assert!(restore < abandon, "{next}");
     assert!(next.contains("cannot be restored"), "{next}");
     assert!(next.contains("publicly"), "{next}");
+    assert!(
+        next.contains("a fresh run with rkc run start reviews again"),
+        "{next}"
+    );
 }
 
 #[test]

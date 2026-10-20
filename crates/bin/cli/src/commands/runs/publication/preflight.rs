@@ -5,7 +5,8 @@ use review_kit_application::{
     use_cases::{
         discovery::discover,
         publishing::{
-            ManagedHistory, OwnedHistory, PublicationProgress, check_review_with_progress,
+            ManagedHistory, OwnedHistory, PublicationProgress, RunPublication,
+            check_review_with_progress,
         },
     },
 };
@@ -72,11 +73,14 @@ pub fn require_fresh(
     preview: &Plan,
 ) -> Result<WriteTargets, CliError> {
     let subject = &run.manifest.subject;
+    let new_run = new_run(run, progress);
     if snapshot.revision != run.manifest.revision {
         return Err(CliError::state(
             "source_changed",
             3,
-            "the merge request revision differs from this run's captured revision; start a new run with rkc run start --new",
+            format!(
+                "the merge request revision differs from this run's captured revision; {new_run}"
+            ),
         )
         .with_details(json!({
             "captured_head": run.manifest.revision.head(),
@@ -105,11 +109,31 @@ pub fn require_fresh(
         return Err(CliError::state(
             "conversation_changed",
             3,
-            "a thread that this publication writes to changed since this run captured it; start a new run with rkc run start --new",
+            format!(
+                "a thread that this publication writes to changed since this run captured it; {new_run}"
+            ),
         )
         .with_details(json!({"changes": changes.iter().map(change).collect::<Vec<_>>()})));
     }
     Ok(targets)
+}
+
+/// How a freshness refusal moves the review to a new run.
+///
+/// An unbound run is stopped first, so `run start` admits the new run without
+/// `--new`. A run whose binding sent nothing cannot be stopped; it stays open
+/// until a new run's publication releases the binding.
+#[review_kit_observation::operations]
+#[helper]
+fn new_run(run: &LoadedRun, progress: &PublicationProgress) -> &'static str {
+    match progress.run_publication(run.run_id()) {
+        RunPublication::BoundUnsent(_) => {
+            "start a new run with rkc run start --new and publish it; that publication releases this run's binding, after which this run can be stopped"
+        }
+        _ => {
+            "stop this run with rkc run stop --reason TEXT, then start a new run with rkc run start"
+        }
+    }
 }
 
 /// Refuse a new publication while another run owns unfinished publication.

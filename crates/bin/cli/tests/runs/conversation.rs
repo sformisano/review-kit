@@ -214,11 +214,12 @@ fn only_an_intact_conversation_counts_as_newer() {
     fs::write(&path, serde_json::to_vec_pretty(&newer).unwrap()).unwrap();
     let status = harness.ok(&["status"]);
     assert_eq!(status["retained_files"]["state"], "damaged", "{status:#}");
+    let next = status["next"].as_str().unwrap();
+    assert!(next.contains("restore the run's exact files"), "{status:#}");
     assert!(
-        status["next"]
-            .as_str()
-            .unwrap()
-            .contains("restore the run's exact files"),
+        next.contains(
+            "stop it with rkc run stop --reason TEXT and start a new run with rkc run start."
+        ),
         "{status:#}"
     );
     harness.fails(&["check"], 2, "hash_mismatch");
