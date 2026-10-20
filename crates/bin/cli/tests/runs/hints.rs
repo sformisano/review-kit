@@ -197,6 +197,11 @@ fn an_uncertain_creation_after_a_new_head_names_the_documented_options() {
         let next = diagnostic["next"].as_str().unwrap();
         assert_stranded(next, Some(&head));
         assert!(next.contains(&format!("rkc run select {owner}")), "{next}");
+        assert!(
+            next.contains("When the merge request changed, stop this run with rkc run stop --reason TEXT instead, then start a fresh run with rkc run start."),
+            "the refused run is unbound: {next}"
+        );
+        assert!(!next.contains("--new"), "{next}");
     }
     assert_eq!(harness.writes(), writes, "guidance changes no write");
     assert_eq!(harness.journal()["unresolved"], journal["unresolved"]);

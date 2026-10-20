@@ -319,7 +319,12 @@ fn source_change_during_an_uncertain_write_reconciles_it_before_stopping() {
             next.contains("rkc publish --abandon --reason TEXT"),
             "{next}"
         );
-        assert!(next.contains("rkc run start --new"), "{next}");
+        // Abandonment settles this run, so the fresh run needs no `--new`.
+        assert!(
+            next.contains("then start a fresh run with rkc run start."),
+            "{next}"
+        );
+        assert!(!next.contains("--new"), "{next}");
         assert!(!next.contains("publish again"), "{next}");
     }
     assert_eq!(harness.manifest(&run_id)["status"], "open");
@@ -331,6 +336,8 @@ fn source_change_during_an_uncertain_write_reconciles_it_before_stopping() {
     ]);
     assert_eq!(abandoned["status"], "settled", "{abandoned:#}");
     assert_eq!(harness.manifest(&run_id)["completion"], "abandoned");
+    let fresh = harness.ok(&["run", "start"]);
+    assert_eq!(fresh["status"], "created", "{fresh:#}");
     assert_eq!(effects(&harness).1, 1);
 }
 

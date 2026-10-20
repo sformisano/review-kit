@@ -189,16 +189,20 @@ fn a_fresh_state_root_refuses_a_pending_or_partial_round_with_guidance() {
                 "latest round finished",
                 "publication_state",
                 "publication-progress.json",
-                "rkc run start --new",
+                "then stop this run with rkc run stop --reason TEXT and start a fresh run here with rkc run start.",
                 "rkc publish",
             ] {
                 assert!(next.contains(expected), "{status} {args:?}: {next}");
             }
+            assert!(!next.contains("--new"), "{status}: {next}");
             assert!(!next.contains("publish again"), "{status}: {next}");
         }
         assert_eq!(harness.writes(), writes, "{status}: no provider writes");
         assert!(harness.journal_dir().is_none(), "{status}: no journal");
         assert_eq!(harness.manifest(&run_id)["publication_attempted"], false);
+        // The refused run never attempted publication, so it stops without its journal.
+        let stopped = harness.ok(&["run", "stop", "--reason", "Another environment publishes."]);
+        assert_eq!(stopped["status"], "stopped", "{status}: {stopped:#}");
     }
 }
 
@@ -248,10 +252,11 @@ fn a_fresh_state_root_explains_a_changed_assessment_of_an_unfinished_round() {
                 "publication_state",
                 "publication-progress.json",
                 "the review run that started round 1",
-                "let it finish, then start a fresh run here with rkc run start --new",
+                "let it finish, then stop this run with rkc run stop --reason TEXT and start a fresh run here with rkc run start.",
             ] {
                 assert!(next.contains(expected), "{status} {command}: {next}");
             }
+            assert!(!next.contains("--new"), "{status} {command}: {next}");
             assert!(
                 !next.contains("Fix review-assessment"),
                 "{status} {command}: {next}"

@@ -189,11 +189,14 @@ pub fn pending_owner(owner: &review_kit_application::review_run::RunId, own: boo
 }
 
 /// How a run that owns nothing gets past another run's unfinished publication.
+///
+/// The unbound run is stopped before a fresh run starts, so `run start` needs
+/// no `--new`.
 #[review_kit_observation::operations]
 #[helper]
 pub fn owner_guidance(owner: &review_kit_application::review_run::RunId) -> String {
     format!(
-        "Run {owner} owns the unfinished publication. Select it with rkc run select {owner}, then recover it with rkc publish and its original effects, or close its round with rkc publish --abandon --reason TEXT once no write is uncertain. Then select this run and publish it, or start a fresh run with rkc run start --new when the merge request changed."
+        "Run {owner} owns the unfinished publication. Select it with rkc run select {owner}, then recover it with rkc publish and its original effects, or close its round with rkc publish --abandon --reason TEXT once no write is uncertain. Then select this run and publish it. When the merge request changed, stop this run with rkc run stop --reason TEXT instead, then start a fresh run with rkc run start."
     )
 }
 
@@ -287,7 +290,7 @@ pub fn unfinished_without_journal(
 #[helper]
 pub fn unfinished_guidance(round: u64) -> String {
     format!(
-        "Round {round} was started from publication state that is not here, and only that state holds the round's possible unresolved write and effect ceiling. rkc starts an empty journal only after the reviewer's latest round finished. If another environment is still publishing, let it finish, then start a fresh run here with rkc run start --new. Otherwise restore that review's directory under the configured publication_state, with its publication-progress.json, and the review run that started round {round}, then recover that run with rkc publish. Without that state rkc neither finishes nor closes round {round}."
+        "Round {round} was started from publication state that is not here, and only that state holds the round's possible unresolved write and effect ceiling. rkc starts an empty journal only after the reviewer's latest round finished. If another environment is still publishing, let it finish, then stop this run with rkc run stop --reason TEXT and start a fresh run here with rkc run start. Otherwise restore that review's directory under the configured publication_state, with its publication-progress.json, and the review run that started round {round}, then recover that run with rkc publish. Without that state rkc neither finishes nor closes round {round}."
     )
 }
 

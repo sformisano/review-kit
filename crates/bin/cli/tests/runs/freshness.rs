@@ -828,7 +828,13 @@ fn the_engine_refuses_a_write_outside_the_compared_targets() {
     let before = writes(&harness);
     let refused = harness.fails(&["publish", "--effects", "review"], 3, "uncompared_write");
     let next = refused["next"].as_str().unwrap();
-    assert!(next.contains("rkc run start --new"), "{next}");
+    assert!(
+        next.contains(
+            "Stop this run with rkc run stop --reason TEXT, then start a fresh run with rkc run start."
+        ),
+        "{next}"
+    );
+    assert!(!next.contains("--new"), "{next}");
     assert_eq!(refused["diagnostics"][0]["next"], refused["next"]);
     assert_eq!(
         refused["run"]["outcome"]["diagnostics"][0]["code"], "uncompared_write",
@@ -842,8 +848,11 @@ fn the_engine_refuses_a_write_outside_the_compared_targets() {
     assert_eq!(harness.journal()["unresolved"], json!(null));
     assert_eq!(harness.manifest(&run_id)["completion"], json!(null));
 
-    // A fresh run captures the moved summary and publishes.
-    let fresh = harness.follow_up_in(&harness.repo, true);
+    // The refused run is unbound, so it stops; a fresh run without `--new`
+    // captures the moved summary and publishes.
+    let stopped = harness.ok(&["run", "stop", "--reason", "The summary moved."]);
+    assert_eq!(stopped["status"], "stopped", "{stopped:#}");
+    let fresh = harness.follow_up_in(&harness.repo, false);
     let published = harness.ok(&["publish", "--effects", "review"]);
     assert_eq!(published["status"], "settled", "{published:#}");
     assert_eq!(harness.manifest(&fresh)["completion"], "published");

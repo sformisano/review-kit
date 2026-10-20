@@ -214,6 +214,7 @@ pub fn execute(
         _ => &snapshot,
     };
     let round = guidance::unfinished_round(final_snapshot, &session.run.manifest.reviewer);
+    let publication = progress.run_publication(session.run.run_id());
     let stranded = guidance::stranded_creation(&progress, &final_snapshot.revision);
     if let Err(PlanError::Binding(BindingError::PendingOwner(owner))) = &report.outcome {
         let refused = match &stranded {
@@ -237,7 +238,7 @@ pub fn execute(
         value["next"] = diagnostic["next"].clone();
         value["diagnostics"] = json!([diagnostic]);
     } else if finished.status == "unfinished" && run_exit(&report) == 3 {
-        let diagnostic = guidance::changed_revision(round);
+        let diagnostic = guidance::changed_revision(round, &publication);
         value["next"] = diagnostic["next"].clone();
         value["diagnostics"] = json!([diagnostic]);
     } else if let Err(error) = &report.outcome
@@ -247,7 +248,7 @@ pub fn execute(
     {
         value["next"] = json!(format!(
             "This run's accepted assessment can no longer complete its round: {error}. {}",
-            guidance::close_round(round)
+            guidance::close_round(round, &publication)
         ));
     }
     if finished.status == "unfinished"

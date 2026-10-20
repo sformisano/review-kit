@@ -3,7 +3,7 @@
 use review_kit_application::{
     publication::{Effect, RoundStatus, Snapshot},
     review_run::RunId,
-    use_cases::publishing::{PlanError, PublicationProgress, ResendBlocked},
+    use_cases::publishing::{PlanError, PublicationProgress, ResendBlocked, RunPublication},
 };
 use review_kit_domain::{ReviewerId, Revision};
 use serde_json::{Value, json};
@@ -26,27 +26,34 @@ pub fn unfinished_round(snapshot: &Snapshot, reviewer: &ReviewerId) -> Option<u6
 }
 
 /// How to move on from a round that this run can no longer complete.
+///
+/// Abandonment settles the run, so `run start` admits the fresh run without
+/// `--new`. Without a round to close, an unbound run is stopped first; a run
+/// that owns a publication binding cannot be stopped and stays open.
 #[review_kit_observation::operations]
 #[helper]
-pub fn close_round(round: Option<u64>) -> String {
-    match round {
-        Some(round) => format!(
-            "Close round {round} with rkc publish --abandon --reason TEXT once no write is uncertain, then start a fresh run with rkc run start --new."
+pub fn close_round(round: Option<u64>, publication: &RunPublication<'_>) -> String {
+    match (round, publication) {
+        (Some(round), _) => format!(
+            "Close round {round} with rkc publish --abandon --reason TEXT once no write is uncertain, then start a fresh run with rkc run start."
         ),
-        None => "Start a fresh run with rkc run start --new.".to_owned(),
+        (None, RunPublication::Unbound) => {
+            "Stop this run with rkc run stop --reason TEXT, then start a fresh run with rkc run start.".to_owned()
+        }
+        (None, _) => "Start a fresh run with rkc run start --new.".to_owned(),
     }
 }
 
 /// The top-level diagnostic of a publication stopped by a new head or base.
 #[review_kit_observation::operations]
 #[helper]
-pub fn changed_revision(round: Option<u64>) -> Value {
+pub fn changed_revision(round: Option<u64>, publication: &RunPublication<'_>) -> Value {
     json!({
         "code": "changed_revision",
         "message": "the merge request revision changed after this run's capture, so publication stopped before completing its round",
         "next": format!(
             "This run cannot complete its publication on the new revision. {}",
-            close_round(round)
+            close_round(round, publication)
         ),
     })
 }
@@ -56,14 +63,15 @@ pub fn changed_revision(round: Option<u64>) -> Value {
 /// compared; it stopped before recording any write intent.
 ///
 /// A run whose `unsent` binding stays in the journal learns that only a fresh
-/// run's publication releases it.
+/// run's publication releases it. Any other run that reaches this refusal is
+/// unbound, so it is stopped before the fresh run starts.
 #[review_kit_observation::operations]
 #[helper]
 pub fn uncompared_write(unsent: bool) -> Value {
     let next = if unsent {
         "The reviewer's history on the merge request changed after the freshness preflight, and no write of this run's publication binding could have reached the provider. Start a fresh run with rkc run start --new and publish it; that publication releases this binding, after which this run can be stopped."
     } else {
-        "The reviewer's history on the merge request changed after the freshness preflight. Start a fresh run with rkc run start --new."
+        "The reviewer's history on the merge request changed after the freshness preflight. Stop this run with rkc run stop --reason TEXT, then start a fresh run with rkc run start."
     };
     json!({
         "code": "uncompared_write",
@@ -146,7 +154,7 @@ pub fn stranded_guidance(stranded: &StrandedCreation, owner: Option<&RunId>) -> 
                 "recover run {owner} with rkc run select {owner} and rkc publish with its original effects"
             ),
             format!(
-                " After run {owner} settles, select this run and publish it, or start a fresh run with rkc run start --new when the merge request changed."
+                " After run {owner} settles, select this run and publish it. When the merge request changed, stop this run with rkc run stop --reason TEXT instead, then start a fresh run with rkc run start."
             ),
         ),
         None => (

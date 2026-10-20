@@ -917,7 +917,8 @@ fail with `journal_missing` before any write. The diagnostic's `round` names the
 unfinished round (`null` when there is none) and its `next` gives the reason:
 only the publication state that started the round holds its possible unresolved
 write and effect ceiling. When another environment is still publishing, let it
-finish and start a fresh run with `rkc run start --new`. Otherwise
+finish, stop the refused run with `rkc run stop --reason TEXT` and start a fresh
+run with `rkc run start`. Otherwise
 [move that publication state](#moving-publication-state) here together with the
 run that started the round, and recover that run. rkc neither finishes nor
 closes the round without that state. While such a round is unfinished, `check`
@@ -1021,7 +1022,8 @@ the diagnostic grants neither action.
 A duplicate root is the documented risk of a resend: the original creation
 arrived late, after the one bounded resend. Review Kit never deletes duplicates.
 For a separately authorized repair, delete on GitLab the root that this reviewer's
-run never verified, then start a new run with `rkc run start --new`. The verified root is
+run never verified, then start a new run with `rkc run start`. Stop an open run
+without a publication binding first with `rkc run stop --reason TEXT`. The verified root is
 the one in the publishing run's finding readback records; when that record is
 unavailable, delete the root with the later `created_at`:
 

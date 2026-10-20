@@ -347,6 +347,11 @@ fn a_pending_owner_is_reported_before_the_freshness_preflight() {
         let next = diagnostic["next"].as_str().unwrap();
         assert!(next.contains(&format!("rkc run select {owner}")), "{next}");
         assert!(next.contains("rkc publish --abandon"), "{next}");
+        assert!(
+            next.contains("When the merge request changed, stop this run with rkc run stop --reason TEXT instead, then start a fresh run with rkc run start."),
+            "the refused run is unbound: {next}"
+        );
+        assert!(!next.contains("--new"), "{next}");
         assert!(!next.contains("publish again"), "{next}");
     }
     assert_eq!(harness.writes(), writes, "the refused run writes nothing");
